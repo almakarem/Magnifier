@@ -1,0 +1,122 @@
+# Magnifier — default config
+# This file is created at %APPDATA%\Magnifier\config.toml on first launch.
+# Edit and save; either restart the app or run `Magnifier.exe --reload-config`.
+
+schema_version = 1
+
+[general]
+# Launch minimized to tray. The tray icon is always shown.
+start_minimized = false
+# When true, the lens or full-screen mode the user last enabled is
+# restored on next launch. When false, the app launches idle.
+restore_last_mode = true
+# Process priority while a magnifier mode is active.
+# "normal" | "above_normal"
+active_priority = "above_normal"
+
+[lens]
+# Lens window pixel size (logical pixels; scaled to per-monitor DPI).
+width  = 640
+height = 360
+# Border thickness in pixels (0 = no border).
+border_thickness = 2
+# Border colour as #RRGGBB.
+border_color = "#00E5FF"
+# Lens follows the mouse cursor automatically.
+follow_mouse = true
+# Smoothing time-constants (seconds). Larger = smoother but laggier.
+# 0 disables easing entirely.
+position_tau = 0.05
+zoom_tau     = 0.10
+
+[zoom]
+# Initial magnification factor.
+initial = 2.0
+# Allowed range (Magnification API max is 4096.0; we clamp lower for sanity).
+min = 1.0
+max = 16.0
+# Step applied by ZoomIn / ZoomOut actions when no explicit step given.
+default_step = 0.25
+
+[capture]
+# "exclude_self" : magnifier overlay is hidden from screen-capture tools (OBS, Snipping).
+#                  Streamers' viewers see the un-zoomed screen. (Default; W10 2004+.)
+# "include_self" : viewers see the zoom too.
+# "auto"         : exclude_self when supported, else include_self with a UI warning.
+mode = "auto"
+
+[ipc]
+# Named pipe \\.\pipe\<name> always on (current-user ACL).
+pipe_name = "MagnifierCtl"
+# Local HTTP loopback. Off by default; set port > 0 to enable.
+http_port = 0
+
+[advanced]
+# Use a global low-level keyboard hook for hotkeys. Slightly more reliable
+# inside games that grab raw input, but flagged by some anti-cheat systems.
+# Default OFF. Turn on at your own risk.
+low_level_keyboard_hook = false
+log_level = "info"   # trace | debug | info | warn | error | off
+
+[update]
+# Check the GitHub Releases API on startup for a newer build. When a newer
+# version is found, a tray balloon appears and the Updates tab in Settings
+# lights up. Installing the update is opt-in (one click in the Updates tab).
+check_on_startup = true
+# Auto-download the .msi in the background after the check succeeds.
+# (The installer still only runs when the user clicks "Install update".)
+auto_download    = false
+# GitHub repository to query — owner/repo. Leave owner empty to disable.
+owner            = ""
+repo             = "Magnifier"
+# Personal Access Token, fine-grained scope "Contents: Read" on the target
+# repo. REQUIRED for private repositories; leave empty for public ones.
+# Stored in plaintext in this config — protect it like a password.
+token            = ""
+
+# ----------------------------------------------------------------------------
+# Hotkeys
+# Modifiers: any combination of "ctrl", "shift", "alt", "win", separated by '+'.
+# Key:       virtual-key name (a-z, 0-9, f1-f24, space, escape, plus, minus, ...).
+# Set "" to leave an action unbound.
+# ----------------------------------------------------------------------------
+[hotkeys]
+toggle_lens        = "ctrl+alt+z"
+toggle_fullscreen  = "ctrl+alt+f"
+turn_off           = "ctrl+alt+x"
+zoom_in            = "ctrl+alt+plus"
+zoom_out           = "ctrl+alt+minus"
+lens_size_up       = "ctrl+alt+]"
+lens_size_down     = "ctrl+alt+["
+recenter           = "ctrl+alt+c"
+
+# ----------------------------------------------------------------------------
+# Controllers
+# Mappings apply to ANY connected controller by default; per-device overrides
+# can be added under [controller.devices."<vendor>:<product>"] if needed.
+# ----------------------------------------------------------------------------
+[controller]
+enabled = true
+# Stick deadzone (0.0-1.0).
+deadzone = 0.15
+# Response curve exponent (1.0 = linear, 2.0 = quadratic, etc.).
+curve = 2.0
+# Movement speed in unmagnified pixels per second at full stick deflection.
+move_speed = 800.0
+# Zoom speed (zoom-factor units per second at full deflection).
+zoom_speed = 2.0
+# Auto-release: when the stick is idle this many seconds, the lens snaps
+# back to the mouse cursor. Set 0 to keep the controller-driven offset.
+idle_recenter_seconds = 1.5
+
+[controller.bindings]
+# Axes: "ls_x" "ls_y" "rs_x" "rs_y" "lt" "rt"
+# Buttons: "a" "b" "x" "y" "lb" "rb" "back" "start" "ls" "rs"
+#          "dpad_up" "dpad_down" "dpad_left" "dpad_right"
+move_x            = "ls_x"
+move_y            = "ls_y"
+zoom_axis         = "rs_y"          # push up = zoom in
+toggle_lens       = "x"
+toggle_fullscreen = "y"
+turn_off          = "back"
+recenter          = "ls"            # press left stick

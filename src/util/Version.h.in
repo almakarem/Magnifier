@@ -1,0 +1,15 @@
+// Generated from Version.h.in by CMake. Do not edit the generated file.
+#pragma once
+
+namespace magnifier {
+
+inline constexpr const char* kProjectName   = "Magnifier";
+inline constexpr const char* kVersionString = "@PROJECT_VERSION@";
+inline constexpr int kVersionMajor          = @PROJECT_VERSION_MAJOR@;
+inline constexpr int kVersionMinor          = @PROJECT_VERSION_MINOR@;
+inline constexpr int kVersionPatch          = @PROJECT_VERSION_PATCH@;
+
+// Schema version for the on-disk TOML config. Bump only on breaking changes.
+inline constexpr int kConfigSchemaVersion   = 1;
+
+} // namespace magnifier

@@ -1,0 +1,54 @@
+# Build artifacts
+build/
+out/
+bin/
+obj/
+dist/
+artifacts/
+_deps/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Testing/
+CTestTestfile.cmake
+install_manifest.txt
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+.vs/
+
+# WiX per-project extension cache
+.wix/
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+
+# Compiled
+*.obj
+*.o
+*.exe
+*.dll
+*.lib
+*.pdb
+*.exp
+*.ilk
+*.idb
+*.tlog
+*.log
+
+# WiX
+*.wixobj
+*.wixpdb
+*.msi
+*.cab
+
+# Local
+*.local

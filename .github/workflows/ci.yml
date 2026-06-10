@@ -1,0 +1,93 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+    tags:     [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build, test, package
+    runs-on: windows-2022
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Add MSVC dev tools to PATH
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure (CMake + Ninja)
+        run: |
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DMAGNIFIER_BUILD_TESTS=ON `
+            -DMAGNIFIER_WARNINGS_AS_ERRORS=OFF
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Run tests
+        working-directory: build
+        run: ctest --output-on-failure -C Release
+
+      - name: Portable zip via CPack
+        working-directory: build
+        run: cpack -G ZIP -C Release
+
+      - name: Install WiX 4
+        run: dotnet tool install --global wix --version 4.0.6
+
+      - name: Add WiX UI extension
+        run: wix extension add --global WixToolset.UI.wixext/4.0.6
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path CMakeLists.txt -Pattern 'VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)').Matches[0].Groups[1].Value
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          wix build packaging\wix\Magnifier.wxs `
+            -define BinariesDir=build `
+            -bindpath "Binaries=build" `
+            -define Version=$ver `
+            -arch x64 `
+            -ext WixToolset.UI.wixext `
+            -out "artifacts\Magnifier-$ver-x64.msi"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: magnifier-windows-x64
+          path: |
+            build/Magnifier-*-win64.zip
+            artifacts/Magnifier-*-x64.msi
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: magnifier-windows-x64
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/Magnifier-*-win64.zip
+            dist/**/Magnifier-*-x64.msi
+          generate_release_notes: true

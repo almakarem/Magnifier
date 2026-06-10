@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX 4 source for the Magnifier MSI.
+  Build via scripts/release.cmd (handles dotnet tool install + extension add).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <?define UpgradeCode = "5DF7A9A7-9C92-4D5E-9C2A-3E0B0BAFF55E" ?>
+
+  <Package Name="Magnifier"
+           Manufacturer="Magnifier Project"
+           Version="$(Version)"
+           UpgradeCode="$(UpgradeCode)"
+           Scope="perUserOrMachine"
+           Compressed="yes"
+           InstallerVersion="500">
+
+    <SummaryInformation Description="Magnifier — overlay zoom for streamers" />
+
+    <MajorUpgrade
+        DowngradeErrorMessage="A newer version of Magnifier is already installed."
+        Schedule="afterInstallInitialize"
+        AllowSameVersionUpgrades="yes" />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Property Id="ARPPRODUCTICON" Value="MagnifierIcon" />
+    <Property Id="ARPHELPLINK"    Value="https://github.com/local/magnifier" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/local/magnifier" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+    <ui:WixUI Id="WixUI_InstallDir" />
+    <WixVariable Id="WixUILicenseRtf" Value="packaging\wix\License.rtf" />
+
+    <!-- "Start at login" checkbox on the Customise dialog. Implemented via a
+         property that controls whether the Run-key Registry component is
+         installed. -->
+    <Property Id="STARTATLOGIN" Value="1" Secure="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Magnifier">
+        <Component Id="MainExe" Guid="*">
+          <File Id="MagnifierExe"
+                Source="!(bindpath.Binaries)\Magnifier.exe"
+                KeyPath="yes" />
+        </Component>
+        <Component Id="DefaultConfig" Guid="*">
+          <File Source="packaging\portable\config.default.toml" KeyPath="yes" />
+        </Component>
+        <Component Id="License" Guid="*">
+          <File Source="LICENSE" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppShortcutFolder" Name="Magnifier">
+        <Component Id="StartMenuShortcut" Guid="*">
+          <Shortcut Id="MagnifierStartMenu"
+                    Name="Magnifier"
+                    Description="Magnifier — overlay zoom"
+                    Target="[INSTALLFOLDER]Magnifier.exe"
+                    WorkingDirectory="INSTALLFOLDER" />
+          <RemoveFolder Id="AppShortcutFolder" On="uninstall" />
+          <RegistryValue Root="HKCU"
+                         Key="Software\Magnifier\Installed"
+                         Name="StartMenuShortcut"
+                         Type="integer"
+                         Value="1"
+                         KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Optional: start at login (HKCU\...\Run). Conditioned on the
+         STARTATLOGIN property which the user can set on the command line:
+              msiexec /i Magnifier.msi STARTATLOGIN=0
+    -->
+    <Component Id="StartAtLogin" Guid="*" Directory="INSTALLFOLDER" Condition="STARTATLOGIN=&quot;1&quot;">
+      <RegistryValue Root="HKCU"
+                     Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                     Name="Magnifier"
+                     Type="string"
+                     Value="&quot;[INSTALLFOLDER]Magnifier.exe&quot; --start-minimized"
+                     KeyPath="yes" />
+    </Component>
+
+    <Icon Id="MagnifierIcon" SourceFile="!(bindpath.Binaries)\Magnifier.exe" />
+
+    <Feature Id="MainFeature" Title="Magnifier" Level="1">
+      <ComponentRef Id="MainExe" />
+      <ComponentRef Id="DefaultConfig" />
+      <ComponentRef Id="License" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="StartAtLogin" />
+    </Feature>
+
+  </Package>
+</Wix>
