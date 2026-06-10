@@ -16,6 +16,15 @@ void InputRouter::SetControllerConfig(const ControllerConfig& cfg) {
 
 void InputRouter::OnAction(Action a) {
     spdlog::debug("InputRouter action: {}", std::string(ToString(a)));
+    // Keyboard pan steps. Claim cursor ownership for the idle-recenter
+    // window so mouse-follow doesn't immediately yank the lens back to
+    // the mouse position on the next tick.
+    auto pan = [this](float dx, float dy) {
+        const float step = static_cast<float>(app_.LensPanStep());
+        state_.NudgeTargetCenter(dx * step, dy * step);
+        idle_   = 0.0f;
+        owning_ = true;
+    };
     switch (a) {
         case Action::ToggleLens:        app_.ToggleMode(MagMode::Lens);                break;
         case Action::ToggleFullscreen:  app_.ToggleMode(MagMode::Fullscreen);          break;
@@ -25,6 +34,10 @@ void InputRouter::OnAction(Action a) {
         case Action::ZoomReset:         state_.SetTargetZoom(app_.InitialZoom());      break;
         case Action::LensSizeUp:        app_.ResizeLens(+64, +36);                     break;
         case Action::LensSizeDown:      app_.ResizeLens(-64, -36);                     break;
+        case Action::PanLeft:           pan(-1.0f,  0.0f); break;
+        case Action::PanRight:          pan(+1.0f,  0.0f); break;
+        case Action::PanUp:             pan( 0.0f, -1.0f); break;
+        case Action::PanDown:           pan( 0.0f, +1.0f); break;
         case Action::Recenter:          app_.RecenterOnCursor(); idle_ = 1e9f;         break;
         case Action::NextMonitor:       app_.JumpToNextMonitor();                      break;
         case Action::EnableController:  app_.SetControllerEnabled(true);               break;

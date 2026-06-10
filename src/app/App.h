@@ -56,6 +56,7 @@ public:
 
     float DefaultZoomStep() const noexcept { return cfg_.zoom.default_step; }
     float InitialZoom()    const noexcept { return cfg_.zoom.initial; }
+    int   LensPanStep()    const noexcept { return cfg_.lens.pan_step; }
 
     // The IpcServer Sink — runs on a worker thread; we marshal to UI.
     std::string OnIpcCommand(const Command& cmd);

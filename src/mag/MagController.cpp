@@ -110,7 +110,14 @@ bool MagController::RegisterHostClass_(HINSTANCE hinst) {
     wc.lpfnWndProc   = &MagController::HostProc_;
     wc.hInstance     = hinst;
     wc.hCursor       = ::LoadCursor(nullptr, IDC_ARROW);
-    wc.hbrBackground = nullptr;     // layered: don't paint background
+    // Opaque black background. The host is a layered window used purely
+    // as a render surface for the WC_MAGNIFIER child; any area the child
+    // doesn't cover (e.g. during a brief size mismatch on DPI change or
+    // before the first Tick after a monitor reconfig) MUST be a defined
+    // colour or the user sees uninitialised layered bits, which DWM
+    // composites as white. Black is the correct fallback because the
+    // Magnification API also paints black for off-screen source pixels.
+    wc.hbrBackground = reinterpret_cast<HBRUSH>(::GetStockObject(BLACK_BRUSH));
     wc.lpszClassName = kHostClassName;
     if (!::RegisterClassExW(&wc)) {
         const DWORD err = ::GetLastError();
@@ -141,6 +148,11 @@ bool MagController::CreateHostWindow_(HINSTANCE hinst) {
         spdlog::error("CreateWindowExW (host) failed: {}", LastErrorString());
         return false;
     }
+    // Store `this` so HostProc_ can dispatch WM_SIZE / WM_DPICHANGED back
+    // to the controller. CreateWindowExW passes `this` as lpParam; we set
+    // GWLP_USERDATA here (vs in WM_NCCREATE) so the layered-window setup
+    // below sees a fully-wired window.
+    ::SetWindowLongPtrW(host_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
     // Fully opaque layered (we use it as a render surface, not for alpha).
     ::SetLayeredWindowAttributes(host_, 0, 255, LWA_ALPHA);
 
@@ -401,12 +413,39 @@ void MagController::SetMagnifyCursor(bool enable) {
 }
 
 LRESULT CALLBACK MagController::HostProc_(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    auto* self = reinterpret_cast<MagController*>(
+        ::GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     switch (msg) {
         case WM_DESTROY:
             return 0;
         case WM_NCHITTEST:
             // Click-through.
             return HTTRANSPARENT;
+        case WM_SIZE: {
+            // Keep the WC_MAGNIFIER child exactly aligned with the host's
+            // client area at all times. Without this, when the host is
+            // resized (mode change, DPI change, lens-size hotkey) the
+            // child stays at its previous size and the user sees a band
+            // of stale layered bits around the magnified region.
+            if (self && self->mag_) {
+                const int w = LOWORD(lp);
+                const int h = HIWORD(lp);
+                ::SetWindowPos(self->mag_, nullptr, 0, 0, w, h,
+                    SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOREDRAW);
+            }
+            return 0;
+        }
+        case WM_DPICHANGED: {
+            // The mag control is repositioned/resized every tick by
+            // ApplyLens_, so we just need to force the next tick to
+            // re-push the transform (cached value is for the old DPI).
+            if (self) {
+                self->last_src_w_ = -1;
+                self->last_src_h_ = -1;
+                spdlog::info("MagController: DPI changed to {}", LOWORD(wp));
+            }
+            return 0;
+        }
         default:
             return ::DefWindowProcW(hwnd, msg, wp, lp);
     }

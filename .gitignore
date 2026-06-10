@@ -52,3 +52,6 @@ install_manifest.txt
 
 # Local
 *.local
+
+# stray dev logs
+gh-auth-out.txt

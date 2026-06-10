@@ -112,6 +112,9 @@ void ControllerPoll::PollLoop_() {
         } else {
             for (DWORD i = 0; i < XUSER_MAX_COUNT; ++i) {
                 if (::XInputGetState(i, &state) == ERROR_SUCCESS) {
+                    if (!have_active || active_slot != i) {
+                        spdlog::info("XInput controller detected on slot {}", i);
+                    }
                     active_slot = i;
                     have_active = true;
                     got = true;
@@ -148,6 +151,9 @@ void ControllerPoll::PollLoop_() {
             last_buttons = now;
             last_packet  = state.dwPacketNumber;
         } else {
+            if (have_active) {
+                spdlog::info("XInput controller disconnected (was on slot {})", active_slot);
+            }
             have_active  = false;
             last_buttons = 0;
             last_packet  = 0;

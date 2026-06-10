@@ -28,6 +28,10 @@ follow_mouse = true
 # 0 disables easing entirely.
 position_tau = 0.05
 zoom_tau     = 0.10
+# Discrete pan step in *unmagnified* screen pixels. The arrow-key hotkeys
+# (pan_left/right/up/down) nudge the lens centre by this many pixels per
+# press; hold the key for smooth panning via keyboard autorepeat.
+pan_step = 80
 
 [zoom]
 # Initial magnification factor.
@@ -89,6 +93,13 @@ zoom_out           = "ctrl+alt+minus"
 lens_size_up       = "ctrl+alt+]"
 lens_size_down     = "ctrl+alt+["
 recenter           = "ctrl+alt+c"
+# Arrow-key panning. We default to ctrl+alt+arrow so the bare arrow keys
+# remain free for every other app. Each press moves the lens centre by
+# lens.pan_step pixels; autorepeat while held gives smooth panning.
+pan_left           = "ctrl+alt+left"
+pan_right          = "ctrl+alt+right"
+pan_up             = "ctrl+alt+up"
+pan_down           = "ctrl+alt+down"
 
 # ----------------------------------------------------------------------------
 # Controllers

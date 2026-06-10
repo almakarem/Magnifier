@@ -49,6 +49,23 @@ void PrintToUser(const std::string& utf8) {
 
 int APIENTRY wWinMain(HINSTANCE hinst, HINSTANCE, LPWSTR, int)
 {
+    // Belt-and-braces DPI awareness. The manifest already declares
+    // PerMonitorV2, but some loaders (in particular when launched via the
+    // MSI's repair-install pathway, or via a shim) ignore the embedded
+    // manifest. Setting the context explicitly on the UI thread guarantees
+    // GetSystemMetrics / SetWindowPos values are in physical pixels, which
+    // the WC_MAGNIFIER control assumes. Without this, on a 200% laptop
+    // display the magnifier child renders into a quarter of the host and
+    // the rest shows as uninitialised layered bits (composited as white).
+    {
+        using SetCtxFn = DPI_AWARENESS_CONTEXT (WINAPI*)(DPI_AWARENESS_CONTEXT);
+        HMODULE user32 = ::GetModuleHandleW(L"user32.dll");
+        if (auto fn = user32 ? reinterpret_cast<SetCtxFn>(
+                ::GetProcAddress(user32, "SetThreadDpiAwarenessContext")) : nullptr) {
+            fn(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        }
+    }
+
     // Argv via CommandLineToArgvW (more reliable than lpCmdLine).
     int wargc = 0;
     LPWSTR* wargv = ::CommandLineToArgvW(::GetCommandLineW(), &wargc);

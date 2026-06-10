@@ -27,6 +27,14 @@ enum class Action : std::uint16_t {
     Recenter,               // re-center on the mouse cursor
     NextMonitor,            // for full-screen mode
 
+    // Discrete pan steps (arrow keys, etc.). Each press nudges the lens
+    // centre by `lens.pan_step` UNMAGNIFIED screen pixels. Hotkey
+    // autorepeat is allowed for these so holding the key pans smoothly.
+    PanLeft,
+    PanRight,
+    PanUp,
+    PanDown,
+
     EnableController,
     DisableController,
 
@@ -58,6 +66,10 @@ constexpr std::string_view ToString(Action a) {
         case Action::SetLensSize:      return "set_lens_size";
         case Action::Recenter:         return "recenter";
         case Action::NextMonitor:      return "next_monitor";
+        case Action::PanLeft:          return "pan_left";
+        case Action::PanRight:         return "pan_right";
+        case Action::PanUp:            return "pan_up";
+        case Action::PanDown:          return "pan_down";
         case Action::EnableController: return "enable_controller";
         case Action::DisableController:return "disable_controller";
         case Action::ReloadConfig:     return "reload_config";
@@ -83,6 +95,10 @@ inline Action ActionFromString(std::string_view name) {
     if (name == "set_lens_size")      return Action::SetLensSize;
     if (name == "recenter")           return Action::Recenter;
     if (name == "next_monitor")       return Action::NextMonitor;
+    if (name == "pan_left")           return Action::PanLeft;
+    if (name == "pan_right")          return Action::PanRight;
+    if (name == "pan_up")             return Action::PanUp;
+    if (name == "pan_down")           return Action::PanDown;
     if (name == "enable_controller")  return Action::EnableController;
     if (name == "disable_controller") return Action::DisableController;
     if (name == "reload_config")      return Action::ReloadConfig;

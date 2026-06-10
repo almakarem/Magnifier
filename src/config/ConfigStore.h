@@ -38,6 +38,11 @@ struct LensConfig {
     bool   magnify_cursor   = false;
     float  position_tau     = 0.05f;
     float  zoom_tau         = 0.10f;
+    // Discrete pan step in *unmagnified* screen pixels. Used by the arrow-
+    // key hotkeys (pan_left/right/up/down) — each press nudges the lens
+    // centre by this many pixels. Held down, keyboard autorepeat produces
+    // smooth panning.
+    int    pan_step         = 80;
 };
 
 struct ZoomConfig {

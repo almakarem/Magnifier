@@ -71,9 +71,14 @@ HotkeyManager::ApplyBindings(const std::map<Action, HotkeyBinding>& bindings) {
     for (const auto& [act, bind] : bindings) {
         if (!bind.is_bound()) continue;
         const int id = next_id++;
-        if (!::RegisterHotKey(msg_wnd_, id,
-                              bind.modifiers | MOD_NOREPEAT,
-                              bind.vk)) {
+        // Allow keyboard autorepeat for the pan actions so holding the
+        // arrow key produces smooth panning. All other actions are one-
+        // shot (NOREPEAT prevents accidental rapid retoggling of modes).
+        const bool autorepeat =
+            act == Action::PanLeft  || act == Action::PanRight ||
+            act == Action::PanUp    || act == Action::PanDown;
+        const UINT mods = bind.modifiers | (autorepeat ? 0u : MOD_NOREPEAT);
+        if (!::RegisterHotKey(msg_wnd_, id, mods, bind.vk)) {
             conflicts.push_back({act, bind, LastErrorString()});
             continue;
         }

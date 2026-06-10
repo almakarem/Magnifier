@@ -176,6 +176,10 @@ follow_mouse     = true
 magnify_cursor   = false
 position_tau     = 0.05
 zoom_tau         = 0.10
+# Discrete pan step in unmagnified screen pixels. The arrow-key hotkeys
+# (pan_left/right/up/down) nudge the lens centre by this many pixels per
+# press; hold the key for smooth keyboard panning via key autorepeat.
+pan_step         = 80
 
 [zoom]
 initial      = 2.0
@@ -218,6 +222,15 @@ zoom_out          = "ctrl+alt+minus"
 lens_size_up      = "ctrl+alt+]"
 lens_size_down    = "ctrl+alt+["
 recenter          = "ctrl+alt+c"
+# Arrow keys (with ctrl+alt) pan the lens by `lens.pan_step` pixels per
+# press; autorepeat while held gives smooth panning. We default to a
+# modifier combo so the bare arrow keys still work normally in every app
+# you have open. Triggering a pan claims the lens for
+# `controller.idle_recenter_seconds` so it doesn't snap back to the cursor.
+pan_left          = "ctrl+alt+left"
+pan_right         = "ctrl+alt+right"
+pan_up            = "ctrl+alt+up"
+pan_down          = "ctrl+alt+down"
 
 [controller]
 enabled                = true
@@ -268,6 +281,10 @@ void ParseHotkeyTable(const toml::table& tbl, Config& cfg,
         {"lens_size_down",     Action::LensSizeDown},
         {"recenter",           Action::Recenter},
         {"next_monitor",       Action::NextMonitor},
+        {"pan_left",           Action::PanLeft},
+        {"pan_right",          Action::PanRight},
+        {"pan_up",             Action::PanUp},
+        {"pan_down",           Action::PanDown},
         {"reload_config",      Action::ReloadConfig},
         {"show_settings",      Action::ShowSettings},
         {"quit",               Action::Quit},
@@ -330,6 +347,7 @@ Config ParseToml(std::string_view text, std::vector<std::string>& warnings) {
             cfg.lens.magnify_cursor   = GetOr<bool>(*t, "magnify_cursor", false);
             cfg.lens.position_tau     = static_cast<float>(GetOr<double>(*t, "position_tau", 0.05));
             cfg.lens.zoom_tau         = static_cast<float>(GetOr<double>(*t, "zoom_tau",     0.10));
+            cfg.lens.pan_step         = static_cast<int>(GetOr<int64_t>(*t, "pan_step", 80));
         }
         if (auto t = root["zoom"].as_table()) {
             cfg.zoom.initial      = static_cast<float>(GetOr<double>(*t, "initial", 2.0));
@@ -424,6 +442,7 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
     l.insert("magnify_cursor",   cfg.lens.magnify_cursor);
     l.insert("position_tau",     static_cast<double>(cfg.lens.position_tau));
     l.insert("zoom_tau",         static_cast<double>(cfg.lens.zoom_tau));
+    l.insert("pan_step",         static_cast<int64_t>(cfg.lens.pan_step));
     root.insert("lens", std::move(l));
 
     toml::table z;
@@ -481,6 +500,10 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
     put_hotkey("lens_size_up",      Action::LensSizeUp);
     put_hotkey("lens_size_down",    Action::LensSizeDown);
     put_hotkey("recenter",          Action::Recenter);
+    put_hotkey("pan_left",          Action::PanLeft);
+    put_hotkey("pan_right",         Action::PanRight);
+    put_hotkey("pan_up",            Action::PanUp);
+    put_hotkey("pan_down",          Action::PanDown);
     root.insert("hotkeys", std::move(hk));
 
     toml::table ctrl;
