@@ -203,7 +203,7 @@ check_on_startup = true
 # successful check (still requires user confirmation to launch the installer).
 auto_download    = false
 # GitHub repo to query (owner/repo). Leave owner empty to disable.
-owner            = ""
+owner            = "almakarem"
 repo             = "Magnifier"
 # Personal Access Token (fine-grained, repo "Contents: Read" only) required
 # for *private* repositories. Leave empty for public repos.

@@ -67,7 +67,7 @@ check_on_startup = true
 # (The installer still only runs when the user clicks "Install update".)
 auto_download    = false
 # GitHub repository to query — owner/repo. Leave owner empty to disable.
-owner            = ""
+owner            = "almakarem"
 repo             = "Magnifier"
 # Personal Access Token, fine-grained scope "Contents: Read" on the target
 # repo. REQUIRED for private repositories; leave empty for public ones.
