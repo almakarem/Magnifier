@@ -5,6 +5,7 @@
 #include <Version.h>
 
 #include <cstring>
+#include <mutex>
 
 #if MAGNIFIER_HAVE_IMGUI
 
@@ -65,6 +66,13 @@ struct SettingsWindow::Impl {
     char update_owner_buf[128] = {};
     char update_repo_buf [128] = {};
     char update_token_buf[256] = {};
+
+    // ---- Diagnostics tab ---------------------------------------------------
+    // Mirrored controller poll snapshot. The poll thread calls SetDiagnostics
+    // very frequently; we just keep the most recent value behind a small
+    // mutex so the UI thread can render a stable snapshot.
+    std::mutex      diag_mu;
+    ControllerFrame diag_frame{};
 
     bool CreateDevice() {
         DXGI_SWAP_CHAIN_DESC sd{};
@@ -216,6 +224,11 @@ void SettingsWindow::SetUpdateController(UpdateAction check, UpdateAction downlo
 void SettingsWindow::SetUpdateStatus(const UpdateCheckResult& status) {
     p_->update_status         = status;
     p_->update_check_ever_ran = true;
+}
+
+void SettingsWindow::SetDiagnostics(const ControllerFrame& frame) {
+    std::scoped_lock lk(p_->diag_mu);
+    p_->diag_frame = frame;
 }
 
 bool SettingsWindow::IsVisible() const noexcept {
@@ -532,6 +545,51 @@ bool SettingsWindow::Render() {
                     "asks Magnifier to exit so the installer can replace the\n"
                     "binary in-place. Your config is preserved.");
             }
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Diagnostics")) {
+            // Live mirror of the latest ControllerPoll frame. Useful for
+            // verifying that the BT pad is being seen at all and that
+            // sticks/buttons map correctly.
+            ControllerFrame f;
+            {
+                std::scoped_lock lk(p_->diag_mu);
+                f = p_->diag_frame;
+            }
+            ImGui::Text("Backend: %s",
+                        f.backend.empty() ? "(none — no controller detected)" : f.backend.c_str());
+            ImGui::Text("Device : %s",
+                        f.device_name.empty() ? "—" : f.device_name.c_str());
+            ImGui::Text("Present: %s", f.present ? "yes" : "no");
+            ImGui::Separator();
+
+            auto bar = [](const char* label, float v, float vmin, float vmax) {
+                const float t = (v - vmin) / (vmax - vmin);
+                char buf[32];
+                snprintf(buf, sizeof(buf), "%+0.3f", v);
+                ImGui::ProgressBar(t < 0 ? 0 : (t > 1 ? 1 : t),
+                                   ImVec2(180, 0), buf);
+                ImGui::SameLine();
+                ImGui::Text("%s", label);
+            };
+            bar("Left  X",  f.ls_x, -1, 1);
+            bar("Left  Y",  f.ls_y, -1, 1);
+            bar("Right X",  f.rs_x, -1, 1);
+            bar("Right Y",  f.rs_y, -1, 1);
+            bar("LT",       f.lt,    0, 1);
+            bar("RT",       f.rt,    0, 1);
+            ImGui::Separator();
+            ImGui::Text("Buttons (XInput-style bitfield): 0x%04X", f.buttons);
+
+            ImGui::Spacing();
+            ImGui::TextWrapped(
+                "If Backend is empty and your controller IS plugged in:\n"
+                " - Open %%LOCALAPPDATA%%\\Magnifier\\magnifier.log and look for\n"
+                "   \"WGI: Windows.Gaming.Input backend ready\".\n"
+                " - DualShock 4 / DualSense paired over BT should appear as WGI.\n"
+                " - Xbox controllers usually appear as XInput.\n"
+                " - Some pads only work behind Steam Input or DS4Windows.");
+
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(Magnifier
-    VERSION 0.1.1
+    VERSION 0.1.2
     DESCRIPTION "Overlay magnifier for streamers (lens + full-screen, controller + hotkeys + CLI)"
     HOMEPAGE_URL "https://github.com/almakarem/Magnifier"
     LANGUAGES CXX
@@ -140,6 +140,8 @@ add_library(magnifier_core STATIC
     src/input/HotkeyManager.h
     src/input/ControllerPoll.cpp
     src/input/ControllerPoll.h
+    src/input/WgiGamepad.cpp
+    src/input/WgiGamepad.h
     src/input/InputRouter.cpp
     src/input/InputRouter.h
     src/input/Actions.h

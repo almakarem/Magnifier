@@ -41,6 +41,12 @@ public:
     bool SetLowLevelHook(bool enabled);
     bool LowLevelHookEnabled() const noexcept { return ll_hook_ != nullptr; }
 
+    // Plain (unmodified) arrow keys for panning the lens, registered
+    // *only* while lens mode is active so they don't hijack typing in
+    // other apps. Pass `true` when entering Lens mode, `false` when
+    // leaving. Safe to call repeatedly; idempotent.
+    void SetTransientPanKeys(bool active);
+
 private:
     static LRESULT CALLBACK WndProc_(HWND, UINT, WPARAM, LPARAM);
     static LRESULT CALLBACK LowLevelKbdProc_(int, WPARAM, LPARAM);
@@ -53,6 +59,11 @@ private:
 
     struct Slot { int id; Action action; HotkeyBinding binding; };
     std::vector<Slot> slots_;
+
+    // IDs used for the transient (lens-only) plain arrow-key hotkeys.
+    // Allocated lazily inside SetTransientPanKeys.
+    int transient_ids_[4] = {0, 0, 0, 0};   // L, R, U, D
+    bool transient_active_ = false;
 
     HHOOK     ll_hook_   = nullptr;
     std::map<Action, HotkeyBinding> ll_bindings_;

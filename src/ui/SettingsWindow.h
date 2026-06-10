@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config/ConfigStore.h"
+#include "input/ControllerPoll.h"
 #include "update/Updater.h"
 
 #include <Windows.h>
@@ -34,6 +35,10 @@ public:
     void SetUpdateController(UpdateAction check, UpdateAction download, UpdateAction install);
     // Push the latest async result into the UI (call from WM_APP_UPDATE).
     void SetUpdateStatus(const UpdateCheckResult& status);
+
+    // Push the latest controller poll snapshot for the Diagnostics tab.
+    // Cheap to call every tick — copy is small, mutex is uncontended.
+    void SetDiagnostics(const ControllerFrame& frame);
 
     void Show();
     void Hide();

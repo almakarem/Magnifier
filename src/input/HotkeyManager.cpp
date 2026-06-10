@@ -9,7 +9,13 @@ HotkeyManager* HotkeyManager::ll_instance_ = nullptr;
 namespace {
 constexpr wchar_t kClassName[]  = L"MagnifierHotkeyWnd_v1";
 constexpr wchar_t kWindowName[] = L"MagnifierHotkeySink";
-constexpr int    kFirstHotkeyId = 0xB000;
+constexpr int    kFirstHotkeyId  = 0xB000;
+// IDs for lens-mode-only plain arrow keys. Far above the per-bindings range
+// so they can never collide.
+constexpr int    kTransientIdL   = 0xC001;
+constexpr int    kTransientIdR   = 0xC002;
+constexpr int    kTransientIdU   = 0xC003;
+constexpr int    kTransientIdD   = 0xC004;
 } // namespace
 
 HotkeyManager::~HotkeyManager() {
@@ -46,6 +52,7 @@ bool HotkeyManager::Initialise(HINSTANCE hinst, Sink sink) {
 
 void HotkeyManager::Shutdown() {
     SetLowLevelHook(false);
+    SetTransientPanKeys(false);
     UnregisterAll_();
     if (msg_wnd_) {
         ::DestroyWindow(msg_wnd_);
@@ -59,6 +66,10 @@ void HotkeyManager::UnregisterAll_() {
         ::UnregisterHotKey(msg_wnd_, s.id);
     }
     slots_.clear();
+    // Note: transient (lens-mode) pan keys are NOT touched here because
+    // ApplyBindings calls us mid-session — yanking the arrow keys out from
+    // under the user while lens mode is active would surprise them. They
+    // are released by SetTransientPanKeys(false) or Shutdown().
 }
 
 std::vector<HotkeyManager::Conflict>
@@ -86,6 +97,36 @@ HotkeyManager::ApplyBindings(const std::map<Action, HotkeyBinding>& bindings) {
     }
     ll_bindings_ = bindings;   // used by the LL hook if enabled
     return conflicts;
+}
+
+void HotkeyManager::SetTransientPanKeys(bool active) {
+    if (!msg_wnd_) return;
+    if (active == transient_active_) return;
+    if (active) {
+        // Plain (no-modifier) arrow keys, autorepeat enabled so holding
+        // the key pans smoothly. They're scoped to lens mode by App, so
+        // they shouldn't interfere with text editing in other apps.
+        const struct { int id; UINT vk; } keys[] = {
+            { kTransientIdL, VK_LEFT  },
+            { kTransientIdR, VK_RIGHT },
+            { kTransientIdU, VK_UP    },
+            { kTransientIdD, VK_DOWN  },
+        };
+        for (const auto& k : keys) {
+            if (!::RegisterHotKey(msg_wnd_, k.id, 0u, k.vk)) {
+                spdlog::warn("Lens-mode arrow hotkey registration failed "
+                             "(vk=0x{:02x}): {}", k.vk, LastErrorString());
+            }
+        }
+        spdlog::info("Lens mode: plain arrow keys registered for panning.");
+    } else {
+        ::UnregisterHotKey(msg_wnd_, kTransientIdL);
+        ::UnregisterHotKey(msg_wnd_, kTransientIdR);
+        ::UnregisterHotKey(msg_wnd_, kTransientIdU);
+        ::UnregisterHotKey(msg_wnd_, kTransientIdD);
+        spdlog::info("Lens mode exited: plain arrow keys released.");
+    }
+    transient_active_ = active;
 }
 
 bool HotkeyManager::SetLowLevelHook(bool enabled) {
@@ -116,6 +157,14 @@ LRESULT CALLBACK HotkeyManager::WndProc_(HWND hwnd, UINT msg, WPARAM wp, LPARAM 
             ::GetWindowLongPtrW(hwnd, GWLP_USERDATA));
         if (self) {
             const int id = static_cast<int>(wp);
+            // Transient (lens-mode-only) plain arrow keys first.
+            switch (id) {
+                case kTransientIdL: if (self->sink_) self->sink_(Action::PanLeft);  return 0;
+                case kTransientIdR: if (self->sink_) self->sink_(Action::PanRight); return 0;
+                case kTransientIdU: if (self->sink_) self->sink_(Action::PanUp);    return 0;
+                case kTransientIdD: if (self->sink_) self->sink_(Action::PanDown);  return 0;
+                default: break;
+            }
             for (const auto& s : self->slots_) {
                 if (s.id == id && self->sink_) {
                     self->sink_(s.action);

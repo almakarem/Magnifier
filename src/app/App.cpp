@@ -295,6 +295,9 @@ LRESULT CALLBACK App::AppWndProc_(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 const float dt = std::chrono::duration<float>(
                     now - self->last_tick_).count();
                 self->router_->OnControllerFrame(frame, dt);
+                // Mirror into the Settings -> Diagnostics tab. Cheap; only
+                // copies a tiny struct under a tiny mutex.
+                self->settings_.SetDiagnostics(frame);
             }
             return 0;
         }
@@ -393,6 +396,10 @@ void App::SetMode(MagMode mode) {
         mode == MagMode::Lens ? "Lens" : "Fullscreen");
 
     mag_.SetMode(mode);
+    // Plain arrow keys pan the lens — but ONLY while lens mode is active,
+    // so we don't hijack typing in other apps. The permanent ctrl+alt+arrow
+    // bindings (registered via ApplyBindings) remain always-on.
+    hotkeys_.SetTransientPanKeys(mode == MagMode::Lens);
     if (mode != MagMode::Off) {
         last_mode_ = mode;
         ::SetPriorityClass(::GetCurrentProcess(),

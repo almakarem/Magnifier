@@ -2,11 +2,14 @@
 
 #include "config/ConfigStore.h"
 #include "input/Actions.h"
+#include "input/WgiGamepad.h"
 
 #include <Windows.h>
 
 #include <atomic>
 #include <functional>
+#include <memory>
+#include <string>
 #include <thread>
 
 namespace magnifier {
@@ -23,6 +26,10 @@ struct ControllerFrame {
     float lt          = 0.0f;
     float rt          = 0.0f;
     unsigned buttons  = 0;     // XInput button bitfield
+    // Diagnostics — populated for the Settings -> Diagnostics tab. NOT
+    // used by gameplay logic; the magnifier just needs the floats above.
+    std::string backend;       // "WGI" or "XInput" or ""
+    std::string device_name;   // e.g. "Xbox Wireless Controller"
 };
 
 // Polls XInput controllers on a dedicated thread (~125 Hz) and dispatches:
@@ -65,6 +72,11 @@ private:
 
     FrameSink  on_frame_;
     ActionSink on_action_;
+
+    // Modern gamepad backend (WGI). Constructed lazily inside PollLoop_
+    // so winrt::init_apartment happens on the poll thread, not on the
+    // UI thread (the UI thread is typically STA and would conflict).
+    std::unique_ptr<WgiGamepad> wgi_;
 };
 
 } // namespace magnifier
