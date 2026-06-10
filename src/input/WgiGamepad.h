@@ -47,6 +47,16 @@ public:
     // or the API is unavailable.
     Reading Read();
 
+    // Diagnostic snapshot — counts visible to each WGI enumeration. Useful
+    // for telling the user "your pad IS visible to Windows, just not as a
+    // standard Gamepad". Cheap; safe to call from the UI thread.
+    struct Probe {
+        unsigned    gamepad_count        = 0;
+        unsigned    raw_controller_count = 0;
+        std::string first_raw_name;        // display name of the first non-Gamepad pad, if any
+    };
+    Probe ProbeDevices();
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

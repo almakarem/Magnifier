@@ -30,6 +30,10 @@ struct ControllerFrame {
     // used by gameplay logic; the magnifier just needs the floats above.
     std::string backend;       // "WGI" or "XInput" or ""
     std::string device_name;   // e.g. "Xbox Wireless Controller"
+    // WGI enumeration counts (best-effort, may be 0 if WGI unavailable).
+    unsigned    wgi_gamepad_count = 0;
+    unsigned    wgi_raw_count     = 0;
+    std::string wgi_first_raw_name;
 };
 
 // Polls XInput controllers on a dedicated thread (~125 Hz) and dispatches:

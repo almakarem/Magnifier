@@ -73,6 +73,10 @@ struct SettingsWindow::Impl {
     // mutex so the UI thread can render a stable snapshot.
     std::mutex      diag_mu;
     ControllerFrame diag_frame{};
+    // WGI probe results pushed less frequently (every few ticks) by App.
+    unsigned        wgi_gamepad_count = 0;
+    unsigned        wgi_raw_count     = 0;
+    std::string     wgi_first_raw_name;
 
     bool CreateDevice() {
         DXGI_SWAP_CHAIN_DESC sd{};
@@ -231,6 +235,14 @@ void SettingsWindow::SetDiagnostics(const ControllerFrame& frame) {
     p_->diag_frame = frame;
 }
 
+void SettingsWindow::SetWgiProbe(unsigned gamepad_count, unsigned raw_count,
+                                 const std::string& first_raw_name) {
+    std::scoped_lock lk(p_->diag_mu);
+    p_->wgi_gamepad_count  = gamepad_count;
+    p_->wgi_raw_count      = raw_count;
+    p_->wgi_first_raw_name = first_raw_name;
+}
+
 bool SettingsWindow::IsVisible() const noexcept {
     return p_->visible.load(std::memory_order_acquire);
 }
@@ -356,6 +368,21 @@ bool SettingsWindow::Render() {
                 "Click 'Set' next to an action, then press the key combo "
                 "you want (e.g. Ctrl+Y). Press Esc to cancel. Click 'Clear' "
                 "to unbind. Bindings take effect when you press 'Apply'.");
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.2f, 1.0f));
+            ImGui::TextWrapped(
+                "NOTE about Ctrl+Alt+Arrow keys: Intel and AMD graphics drivers "
+                "reserve Ctrl+Alt+Arrows for screen rotation. If those bindings "
+                "don't seem to fire here, the GPU driver is eating them BEFORE "
+                "Windows can dispatch them to us. Two fixes:\n"
+                "  1. Disable the GPU's hotkeys (Intel Graphics Command Center -> "
+                "Preferences -> System -> Hotkeys -> Off; or AMD Adrenalin -> "
+                "Preferences -> Hotkeys).\n"
+                "  2. OR rebind 'Pan left/right/up/down' below to something the "
+                "GPU doesn't claim, e.g. Win+Alt+Arrows or Shift+Alt+Arrows.\n"
+                "Plain Arrow keys also pan while lens mode is active (no "
+                "modifier needed).");
+            ImGui::PopStyleColor();
             ImGui::Separator();
 
             struct Row { const char* label; Action act; };
@@ -368,6 +395,10 @@ bool SettingsWindow::Render() {
                 {"Zoom reset",         Action::ZoomReset},
                 {"Lens larger",        Action::LensSizeUp},
                 {"Lens smaller",       Action::LensSizeDown},
+                {"Pan left",           Action::PanLeft},
+                {"Pan right",          Action::PanRight},
+                {"Pan up",             Action::PanUp},
+                {"Pan down",           Action::PanDown},
                 {"Recenter on cursor", Action::Recenter},
                 {"Next monitor",       Action::NextMonitor},
                 {"Show settings",      Action::ShowSettings},
@@ -552,15 +583,27 @@ bool SettingsWindow::Render() {
             // verifying that the BT pad is being seen at all and that
             // sticks/buttons map correctly.
             ControllerFrame f;
+            unsigned ng = 0, nr = 0;
+            std::string raw_name;
             {
                 std::scoped_lock lk(p_->diag_mu);
-                f = p_->diag_frame;
+                f        = p_->diag_frame;
+                ng       = p_->wgi_gamepad_count;
+                nr       = p_->wgi_raw_count;
+                raw_name = p_->wgi_first_raw_name;
             }
             ImGui::Text("Backend: %s",
-                        f.backend.empty() ? "(none — no controller detected)" : f.backend.c_str());
+                        f.backend.empty() ? "(none - no controller detected)" : f.backend.c_str());
             ImGui::Text("Device : %s",
-                        f.device_name.empty() ? "—" : f.device_name.c_str());
+                        f.device_name.empty() ? "-" : f.device_name.c_str());
             ImGui::Text("Present: %s", f.present ? "yes" : "no");
+            ImGui::Separator();
+            ImGui::Text("WGI enumeration:");
+            ImGui::BulletText("Standard Gamepads visible to Windows: %u", ng);
+            ImGui::BulletText("Raw HID gamepads visible to Windows : %u%s%s",
+                              nr,
+                              raw_name.empty() ? "" : "  -  ",
+                              raw_name.empty() ? "" : raw_name.c_str());
             ImGui::Separator();
 
             auto bar = [](const char* label, float v, float vmin, float vmax) {
@@ -583,12 +626,49 @@ bool SettingsWindow::Render() {
 
             ImGui::Spacing();
             ImGui::TextWrapped(
-                "If Backend is empty and your controller IS plugged in:\n"
-                " - Open %%LOCALAPPDATA%%\\Magnifier\\magnifier.log and look for\n"
-                "   \"WGI: Windows.Gaming.Input backend ready\".\n"
-                " - DualShock 4 / DualSense paired over BT should appear as WGI.\n"
-                " - Xbox controllers usually appear as XInput.\n"
-                " - Some pads only work behind Steam Input or DS4Windows.");
+                "Reading guide:\n"
+                "  * Gamepads > 0  -> Windows sees your pad as a standard gamepad. Should Just Work.\n"
+                "  * Gamepads = 0 AND Raw > 0  -> Windows sees a HID gamepad but won't promote it.\n"
+                "    We use the raw fallback (axes only). Buttons may map differently per vendor.\n"
+                "  * Both 0  -> Windows doesn't see the pad at all. Pair via Settings -> Bluetooth,\n"
+                "    or install vendor drivers (e.g. DS4Windows for DualShock/DualSense).\n"
+                "Steam sees pads via its own HID driver - Steam working doesn't imply Windows sees it.");
+
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("About")) {
+            ImGui::Text("Magnifier %s", kVersionString);
+            ImGui::TextDisabled("A low-latency screen magnifier for Windows.");
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            ImGui::TextUnformatted("Author");
+            ImGui::BulletText("AMSA  -  https://github.com/almakarem");
+            ImGui::Spacing();
+
+            ImGui::TextUnformatted("Source");
+            ImGui::BulletText("https://github.com/almakarem/Magnifier");
+            ImGui::Spacing();
+
+            ImGui::TextUnformatted("Support / donations");
+            ImGui::TextWrapped(
+                "   (placeholder - a Ko-fi / GitHub Sponsors / PayPal link "
+                "will go here. Tell the maintainer which you prefer and the "
+                "link will be filled in.)");
+            ImGui::Spacing();
+
+            ImGui::TextUnformatted("Acknowledgements");
+            ImGui::BulletText("Windows Magnification API (Microsoft)");
+            ImGui::BulletText("Dear ImGui  -  https://github.com/ocornut/imgui");
+            ImGui::BulletText("spdlog, nlohmann/json, tomlplusplus, GoogleTest");
+            ImGui::BulletText("WiX Toolset (MSI packaging)");
+            ImGui::Spacing();
+
+            ImGui::TextUnformatted("License");
+            ImGui::TextWrapped(
+                "   (placeholder - add your preferred license here, e.g. MIT, "
+                "Apache-2.0, or proprietary. The repository will need a LICENSE "
+                "file at the root once chosen.)");
 
             ImGui::EndTabItem();
         }

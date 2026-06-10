@@ -298,6 +298,9 @@ LRESULT CALLBACK App::AppWndProc_(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 // Mirror into the Settings -> Diagnostics tab. Cheap; only
                 // copies a tiny struct under a tiny mutex.
                 self->settings_.SetDiagnostics(frame);
+                self->settings_.SetWgiProbe(frame.wgi_gamepad_count,
+                                            frame.wgi_raw_count,
+                                            frame.wgi_first_raw_name);
             }
             return 0;
         }

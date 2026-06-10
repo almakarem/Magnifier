@@ -97,6 +97,12 @@ void ControllerPoll::PollLoop_() {
     DWORD    active_slot  = 0;
     bool     have_active  = false;
 
+    // Cached WGI device enumeration (refreshed every ~0.5s, not every tick).
+    unsigned    probe_tick            = 0;
+    unsigned    cached_probe_gamepads = 0;
+    unsigned    cached_probe_raw      = 0;
+    std::string cached_probe_raw_name;
+
     // Construct the modern (WGI) backend on this thread so its WinRT
     // apartment initialisation doesn't fight the UI thread (which is
     // typically STA — RPC_E_CHANGED_MODE if we MTA-init it). WGI supports
@@ -215,6 +221,21 @@ void ControllerPoll::PollLoop_() {
                 last_packet  = 0;
             }
         }
+
+        // Refresh WGI device counts every ~half second so the Diagnostics
+        // tab can tell the user "Windows sees N pads" without hammering
+        // the WinRT statics 60x/sec. Cheap probe; skipped if WGI failed
+        // to initialise.
+        ++probe_tick;
+        if (wgi_ && wgi_->Available() && (probe_tick % 30 == 0)) {
+            auto pr = wgi_->ProbeDevices();
+            cached_probe_gamepads = pr.gamepad_count;
+            cached_probe_raw      = pr.raw_controller_count;
+            cached_probe_raw_name = pr.first_raw_name;
+        }
+        frame.wgi_gamepad_count  = cached_probe_gamepads;
+        frame.wgi_raw_count      = cached_probe_raw;
+        frame.wgi_first_raw_name = cached_probe_raw_name;
 
         if (on_frame_) on_frame_(frame);
         std::this_thread::sleep_for(kPollInterval);

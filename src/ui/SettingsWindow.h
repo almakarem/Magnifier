@@ -40,6 +40,12 @@ public:
     // Cheap to call every tick — copy is small, mutex is uncontended.
     void SetDiagnostics(const ControllerFrame& frame);
 
+    // Extra WGI probe counts surfaced under the Diagnostics tab. Helps
+    // distinguish "WGI sees nothing" from "WGI sees a pad but can't map
+    // it as a standard gamepad".
+    void SetWgiProbe(unsigned gamepad_count, unsigned raw_count,
+                     const std::string& first_raw_name);
+
     void Show();
     void Hide();
     bool IsVisible() const noexcept;
