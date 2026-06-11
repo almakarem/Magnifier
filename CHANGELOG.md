@@ -8,6 +8,26 @@ and this project follows a loose [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-06-11
+
+### Fixed
+- **Lens stops following the mouse after a keyboard pan or controller
+  nudge.** `InputRouter` set its cursor-ownership latch when a pan
+  hotkey or controller stick moved the lens, but only the controller
+  path ever cleared the latch (and only after
+  `controller.idle_recenter_seconds`). A single arrow-key press
+  therefore stuck the lens off-cursor until the app was restarted.
+  Mouse-follow now releases the latch the instant the physical
+  mouse moves, and `SetMode` resets the latch when the lens is
+  toggled off / on. New `InputRouter::ReleaseCursorOwnership()` is
+  also called explicitly on mode transitions.
+- **`--start-minimized` flag (and `general.start_minimized` setting)
+  was a no-op for the first-run welcome balloon.** `App::Initialise`
+  discarded `opts.start_minimized` with a `(void)` cast and never
+  consulted the persisted setting. Both inputs are now combined into
+  a `start_quiet` predicate that suppresses the welcome toast,
+  making autostart launches silent as advertised.
+
 ## [0.1.4] - 2026-06-11
 
 ### Added
@@ -120,7 +140,8 @@ Initial public release.
   Capture, Controller, IPC, Advanced, Updates, Hotkeys, Diagnostics,
   About.
 
-[Unreleased]: https://github.com/almakarem/Magnifier/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/almakarem/Magnifier/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/almakarem/Magnifier/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/almakarem/Magnifier/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/almakarem/Magnifier/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/almakarem/Magnifier/compare/v0.1.1...v0.1.2

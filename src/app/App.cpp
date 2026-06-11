@@ -206,7 +206,12 @@ bool App::Initialise(HINSTANCE hinst, const AppOptions& opts) {
         // Apply locally - we are the running instance.
         OnIpcCommand(*opts.startup_command);
     }
-    (void)opts.start_minimized;   // tray-only by default; nothing to suppress.
+    // "start minimized" can come from either the --start-minimized CLI
+    // flag (set by autostart shortcut) or the persisted General setting.
+    // Either suppresses the first-run welcome balloon so an autostart
+    // launch is silent.
+    const bool start_quiet =
+        opts.start_minimized || cfg_.general.start_minimized;
 
     // ---- tray hover summary + first-run welcome toast --------------------
     // Tooltip mirrors the currently-bound hotkeys so a quick hover answers
@@ -216,7 +221,7 @@ bool App::Initialise(HINSTANCE hinst, const AppOptions& opts) {
     // first-run flag is implicit in the act of writing the default config
     // file, so subsequent launches stay quiet.
     RefreshTrayTooltip_();
-    if (first_run_) {
+    if (first_run_ && !start_quiet) {
         std::wstring toggle = L"(unbound)";
         std::wstring settings = L"(unbound)";
         if (auto it = cfg_.hotkeys.find(Action::ToggleLens);
@@ -453,6 +458,13 @@ void App::SetMode(MagMode mode) {
     // so we don't hijack typing in other apps. The permanent ctrl+alt+arrow
     // bindings (registered via ApplyBindings) remain always-on.
     hotkeys_.SetTransientPanKeys(mode == MagMode::Lens);
+    // Entering or leaving a magnification mode invalidates the cursor-
+    // ownership latch: we don't want a controller / keyboard pan from
+    // the previous session sticking the lens off-cursor when the user
+    // re-enables it. Re-seed the mouse-motion tracker so the first
+    // post-toggle tick doesn't false-trigger a ReleaseCursorOwnership.
+    if (router_) router_->ReleaseCursorOwnership();
+    last_mouse_pt_valid_ = false;
     if (mode != MagMode::Off) {
         last_mode_ = mode;
         ::SetPriorityClass(::GetCurrentProcess(),
@@ -642,16 +654,33 @@ void App::ApplyHotkeys_() {
 void App::UpdateMouseFollow_() {
     if (!cfg_.lens.follow_mouse) return;
     if (state_.GetSnapshot().mode == MagMode::Off) return;
-    if (router_ && router_->ControllerOwnsCursor()) return;
 
     POINT pt{};
-    if (::GetCursorPos(&pt)) {
-        state_.SetTargetCenter(static_cast<float>(pt.x), static_cast<float>(pt.y));
-        // Bypass position easing for the mouse: any lag here is visible as
-        // a ghost trail behind fast cursor moves. Zoom still eases via the
-        // normal Tick() path because that's animation, not tracking.
-        state_.SnapCenterToTarget();
+    if (!::GetCursorPos(&pt)) return;
+
+    // If the physical mouse moved since the last tick, hand cursor
+    // ownership back to mouse-follow even if a controller stick or
+    // keyboard pan had just latched it. This is the user signalling
+    // "I want the lens to follow the cursor again". Without this the
+    // first arrow-key pan or controller nudge would stick the lens
+    // off-cursor until the app was restarted (the keyboard pan path
+    // never advanced the idle counter; only OnControllerFrame did).
+    if (last_mouse_pt_valid_) {
+        if ((pt.x != last_mouse_pt_.x || pt.y != last_mouse_pt_.y) &&
+            router_ && router_->ControllerOwnsCursor()) {
+            router_->ReleaseCursorOwnership();
+        }
     }
+    last_mouse_pt_       = pt;
+    last_mouse_pt_valid_ = true;
+
+    if (router_ && router_->ControllerOwnsCursor()) return;
+
+    state_.SetTargetCenter(static_cast<float>(pt.x), static_cast<float>(pt.y));
+    // Bypass position easing for the mouse: any lag here is visible as
+    // a ghost trail behind fast cursor moves. Zoom still eases via the
+    // normal Tick() path because that's animation, not tracking.
+    state_.SnapCenterToTarget();
 }
 
 void App::WritePidFile_() const {

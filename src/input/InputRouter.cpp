@@ -87,4 +87,13 @@ bool InputRouter::ControllerOwnsCursor() const noexcept {
     return owning_;
 }
 
+void InputRouter::ReleaseCursorOwnership() noexcept {
+    // The mouse moved (or some other explicit signal) - drop the
+    // controller/keyboard latch so the next UpdateMouseFollow_ tick
+    // resumes tracking the cursor. We also clear the idle counter so
+    // any in-flight controller stick re-engages cleanly afterwards.
+    owning_ = false;
+    idle_   = 1e9f;
+}
+
 } // namespace magnifier

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(Magnifier
-    VERSION 0.1.4
+    VERSION 0.1.5
     DESCRIPTION "Overlay magnifier for streamers (lens + full-screen, controller + hotkeys + CLI)"
     HOMEPAGE_URL "https://github.com/almakarem/Magnifier"
     LANGUAGES CXX

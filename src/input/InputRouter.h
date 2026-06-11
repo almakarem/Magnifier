@@ -36,6 +36,16 @@ public:
     // mouse-follow code should leave the StateModel center alone.
     bool ControllerOwnsCursor() const noexcept;
 
+    // Hand cursor ownership back to mouse-follow immediately. Called
+    // from App when it detects the physical mouse has moved - that's
+    // the user's signal that they want the lens to follow the cursor
+    // again, no idle-timer wait required. Without this, a single
+    // keyboard pan or controller stick wiggle would latch the lens
+    // away from the cursor until the app was restarted (the keyboard
+    // pan path never cleared owning_, because OnControllerFrame is
+    // the only place the idle counter advanced).
+    void ReleaseCursorOwnership() noexcept;
+
 private:
     App&        app_;
     StateModel& state_;

@@ -130,6 +130,11 @@ private:
     // Last detected refresh rate (Hz) - logged on change so users
     // hunting ghosting can see the value we picked.
     int                             refresh_hz_     = 0;
+    // Last cursor position observed by UpdateMouseFollow_. We use this
+    // to detect physical mouse motion and break out of a controller /
+    // keyboard cursor-ownership latch automatically.
+    POINT                           last_mouse_pt_{0, 0};
+    bool                            last_mouse_pt_valid_ = false;
 
     MagMode                         last_mode_ = MagMode::Lens;   // for Toggle
 
