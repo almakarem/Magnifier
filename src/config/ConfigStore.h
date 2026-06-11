@@ -76,9 +76,13 @@ struct AdvancedConfig {
 struct UpdateConfig {
     bool        check_on_startup = true;
     bool        auto_download    = false;     // download MSI as soon as found
-    std::string owner;                        // GitHub user or org
+    // Defaults point at the public upstream repo so a fresh install can
+    // check for updates with no configuration. The fields remain in the
+    // struct (and on disk) so power users could redirect to a fork by
+    // hand-editing the TOML; the Settings UI no longer exposes them.
+    std::string owner           = "almakarem"; // GitHub user or org
     std::string repo            = "Magnifier";
-    std::string token;                        // PAT (empty for public repos)
+    std::string token;                         // PAT (empty for public repos)
 };
 
 // Modifier flags compatible with RegisterHotKey's fsModifiers parameter.

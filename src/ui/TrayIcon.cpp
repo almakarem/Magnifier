@@ -2,6 +2,10 @@
 #include "util/Log.h"
 #include "util/WinError.h"
 
+#ifdef HAVE_ICON
+#include "resource.h"   // IDI_APP
+#endif
+
 namespace magnifier {
 
 namespace {
@@ -54,7 +58,19 @@ bool TrayIcon::Initialise(HINSTANCE hinst, Sink sink) {
     nid_.uID              = kTrayUid;
     nid_.uFlags           = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid_.uCallbackMessage = WM_TRAY_ICON;
-    nid_.hIcon            = ::LoadIcon(nullptr, IDI_APPLICATION);
+    nid_.hIcon            = nullptr;
+#ifdef HAVE_ICON
+    // Try the embedded multi-resolution icon first; LoadImage picks the
+    // 16x16 entry which is the correct size for the tray notification area.
+    nid_.hIcon = static_cast<HICON>(::LoadImageW(
+        hinst, MAKEINTRESOURCEW(IDI_APP), IMAGE_ICON,
+        ::GetSystemMetrics(SM_CXSMICON),
+        ::GetSystemMetrics(SM_CYSMICON),
+        LR_DEFAULTCOLOR));
+#endif
+    if (!nid_.hIcon) {
+        nid_.hIcon = ::LoadIcon(nullptr, IDI_APPLICATION);
+    }
     std::wcscpy(nid_.szTip, L"Magnifier");
 
     if (!::Shell_NotifyIconW(NIM_ADD, &nid_)) {

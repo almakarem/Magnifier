@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(Magnifier
-    VERSION 0.1.3
+    VERSION 0.1.4
     DESCRIPTION "Overlay magnifier for streamers (lens + full-screen, controller + hotkeys + CLI)"
     HOMEPAGE_URL "https://github.com/almakarem/Magnifier"
     LANGUAGES CXX
@@ -173,6 +173,7 @@ add_library(magnifier_core STATIC
 )
 
 target_include_directories(magnifier_core PUBLIC src)
+target_include_directories(magnifier_core PRIVATE app)
 target_link_libraries(magnifier_core PUBLIC
     spdlog::spdlog
     tomlplusplus::tomlplusplus
@@ -215,6 +216,15 @@ add_executable(Magnifier WIN32
 )
 target_link_libraries(Magnifier PRIVATE magnifier_core)
 target_sources(Magnifier PRIVATE app/Magnifier.exe.manifest)
+target_include_directories(Magnifier PRIVATE app)
+# Bake the app icon into the .exe resource table when present. The .ico is
+# optional - run scripts/make-icon.ps1 to generate it from app/icon.png.
+# Without the file the build still succeeds and the tray uses the system
+# default IDI_APPLICATION icon.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/app/Magnifier.ico")
+    target_compile_definitions(Magnifier PRIVATE HAVE_ICON)
+    target_compile_definitions(magnifier_core PRIVATE HAVE_ICON)
+endif()
 set_target_properties(Magnifier PROPERTIES
     OUTPUT_NAME "Magnifier"
 )

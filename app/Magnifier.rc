@@ -1,11 +1,22 @@
-// Magnifier.rc — version info only. The tray/window icon is loaded from the
-// system default at runtime (LoadIcon(nullptr, IDI_APPLICATION)) so we do not
-// need to ship a binary asset in the v1 repo.
+// Magnifier.rc - version info + tray/window icon.
 #include <winver.h>
+#include "resource.h"
+
+// IDI_APP must match the constant used by LoadIcon(hinst, MAKEINTRESOURCEW(IDI_APP))
+// in the runtime. Keep in sync with src/util/Resources.h.
+//
+// The ICON statement is wrapped in HAVE_ICON because the .ico binary is
+// optional: CMake defines HAVE_ICON only when app/Magnifier.ico exists on
+// disk, so the build still succeeds before the user generates the icon
+// (the runtime falls back to LoadIcon(nullptr, IDI_APPLICATION) when the
+// resource is absent).
+#ifdef HAVE_ICON
+IDI_APP ICON "Magnifier.ico"
+#endif
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION    0,1,0,0
-PRODUCTVERSION 0,1,0,0
+FILEVERSION    0,1,4,0
+PRODUCTVERSION 0,1,4,0
 FILEFLAGSMASK  0x3fL
 #ifdef _DEBUG
 FILEFLAGS      0x1L
@@ -20,14 +31,14 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "CompanyName",      "Magnifier Project"
-            VALUE "FileDescription",  "Overlay magnifier for streamers"
-            VALUE "FileVersion",      "0.1.0.0"
+            VALUE "CompanyName",      "AMSA"
+            VALUE "FileDescription",  "Low-latency overlay magnifier for Windows"
+            VALUE "FileVersion",      "0.1.4.0"
             VALUE "InternalName",     "Magnifier"
-            VALUE "LegalCopyright",   "Copyright (c) 2026"
+            VALUE "LegalCopyright",   "Copyright (c) 2026 AMSA - MIT License"
             VALUE "OriginalFilename", "Magnifier.exe"
             VALUE "ProductName",      "Magnifier"
-            VALUE "ProductVersion",   "0.1.0.0"
+            VALUE "ProductVersion",   "0.1.4.0"
         END
     END
     BLOCK "VarFileInfo"

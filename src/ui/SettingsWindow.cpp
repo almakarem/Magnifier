@@ -2,6 +2,10 @@
 #include "util/Log.h"
 #include "util/WinError.h"
 
+#ifdef HAVE_ICON
+#include "resource.h"   // IDI_APP
+#endif
+
 #include <Version.h>
 
 #include <cstring>
@@ -62,10 +66,6 @@ struct SettingsWindow::Impl {
     SettingsWindow::UpdateAction update_install_cb;
     UpdateCheckResult            update_status{};
     bool                         update_check_ever_ran = false;
-    // Mutable editable buffers so ImGui InputText can write into them.
-    char update_owner_buf[128] = {};
-    char update_repo_buf [128] = {};
-    char update_token_buf[256] = {};
 
     // ---- Diagnostics tab ---------------------------------------------------
     // Mirrored controller poll snapshot. The poll thread calls SetDiagnostics
@@ -208,16 +208,6 @@ SettingsWindow::~SettingsWindow() { Hide(); }
 
 void SettingsWindow::SetConfig(const Config& cfg) {
     p_->cfg = cfg;
-    // Sync editable buffers from the config snapshot. We do this every time
-    // SetConfig is called so an external apply/reload is reflected in the
-    // text boxes the next time the user opens the window.
-    auto copy = [](char* dst, size_t cap, const std::string& src) {
-        std::strncpy(dst, src.c_str(), cap - 1);
-        dst[cap - 1] = '\0';
-    };
-    copy(p_->update_owner_buf, sizeof(p_->update_owner_buf), cfg.update.owner);
-    copy(p_->update_repo_buf,  sizeof(p_->update_repo_buf),  cfg.update.repo);
-    copy(p_->update_token_buf, sizeof(p_->update_token_buf), cfg.update.token);
 }
 void SettingsWindow::SetApplySink(ApplySink sink) { p_->apply = std::move(sink); }
 void SettingsWindow::SetUpdateController(UpdateAction check, UpdateAction download, UpdateAction install) {
@@ -255,7 +245,14 @@ void SettingsWindow::Show() {
         wc.lpfnWndProc   = &Impl::Proc;
         wc.hInstance     = ::GetModuleHandleW(nullptr);
         wc.hCursor       = ::LoadCursor(nullptr, IDC_ARROW);
-        wc.hIcon         = ::LoadIcon(nullptr, IDI_APPLICATION);
+        wc.hIcon         = nullptr;
+#ifdef HAVE_ICON
+        wc.hIcon = static_cast<HICON>(::LoadImageW(
+            wc.hInstance, MAKEINTRESOURCEW(IDI_APP), IMAGE_ICON,
+            ::GetSystemMetrics(SM_CXICON), ::GetSystemMetrics(SM_CYICON),
+            LR_DEFAULTCOLOR));
+#endif
+        if (!wc.hIcon) wc.hIcon = ::LoadIcon(nullptr, IDI_APPLICATION);
         wc.lpszClassName = kClassName;
         ::RegisterClassExW(&wc);
 
@@ -482,32 +479,14 @@ bool SettingsWindow::Render() {
         }
         if (ImGui::BeginTabItem("Updates")) {
             ImGui::Text("Current version: %s", kVersionString);
+            ImGui::TextDisabled("Source: https://github.com/%s/%s",
+                                p_->cfg.update.owner.c_str(),
+                                p_->cfg.update.repo.c_str());
             ImGui::Separator();
 
             ImGui::Checkbox("Check on startup", &p_->cfg.update.check_on_startup);
             ImGui::SameLine();
             ImGui::Checkbox("Auto-download new MSI", &p_->cfg.update.auto_download);
-
-            ImGui::Spacing();
-            ImGui::TextDisabled("GitHub repository (owner / repo)");
-            ImGui::PushItemWidth(220);
-            if (ImGui::InputText("Owner##upd", p_->update_owner_buf, sizeof(p_->update_owner_buf))) {
-                p_->cfg.update.owner = p_->update_owner_buf;
-            }
-            ImGui::SameLine();
-            if (ImGui::InputText("Repo##upd", p_->update_repo_buf, sizeof(p_->update_repo_buf))) {
-                p_->cfg.update.repo = p_->update_repo_buf;
-            }
-            ImGui::PopItemWidth();
-
-            ImGui::TextDisabled("PAT (only required for PRIVATE repos; fine-grained, Contents: Read)");
-            ImGui::PushItemWidth(460);
-            if (ImGui::InputText("##upd_token", p_->update_token_buf,
-                                 sizeof(p_->update_token_buf),
-                                 ImGuiInputTextFlags_Password)) {
-                p_->cfg.update.token = p_->update_token_buf;
-            }
-            ImGui::PopItemWidth();
 
             ImGui::Spacing();
             ImGui::Separator();
@@ -642,19 +621,31 @@ bool SettingsWindow::Render() {
             ImGui::Separator();
             ImGui::Spacing();
 
-            ImGui::TextUnformatted("Author");
-            ImGui::BulletText("AMSA  -  https://github.com/almakarem");
+            ImGui::TextWrapped(
+                "This application is free to use. I built it because Windows' "
+                "own Magnifier is unreliable and a lot of people struggle with "
+                "it, so hopefully this works perfectly for you.");
+            ImGui::Spacing();
+            ImGui::TextWrapped(
+                "It is and will stay free, but if you'd like to tip or donate "
+                "it is not required and is very welcome.");
+            ImGui::Spacing();
+
+            ImGui::TextUnformatted("Support / donations");
+            ImGui::BulletText("Ko-fi : https://ko-fi.com/theamsa");
+            ImGui::BulletText("PayPal: https://paypal.me/TheAMSA");
+            ImGui::Spacing();
+
+            ImGui::TextUnformatted("Contact");
+            ImGui::TextWrapped(
+                "If you want to reach out or report a bug, any of these channels work:");
+            ImGui::BulletText("Discord: AMSA");
+            ImGui::BulletText("X / Twitter: https://x.com/AlmakaremA");
+            ImGui::BulletText("Email: AMSAbualmakarem@gmail.com");
             ImGui::Spacing();
 
             ImGui::TextUnformatted("Source");
             ImGui::BulletText("https://github.com/almakarem/Magnifier");
-            ImGui::Spacing();
-
-            ImGui::TextUnformatted("Support / donations");
-            ImGui::TextWrapped(
-                "   (placeholder - a Ko-fi / GitHub Sponsors / PayPal link "
-                "will go here. Tell the maintainer which you prefer and the "
-                "link will be filled in.)");
             ImGui::Spacing();
 
             ImGui::TextUnformatted("Acknowledgements");
@@ -665,10 +656,7 @@ bool SettingsWindow::Render() {
             ImGui::Spacing();
 
             ImGui::TextUnformatted("License");
-            ImGui::TextWrapped(
-                "   (placeholder - add your preferred license here, e.g. MIT, "
-                "Apache-2.0, or proprietary. The repository will need a LICENSE "
-                "file at the root once chosen.)");
+            ImGui::TextWrapped("MIT License - Copyright (c) 2026 AMSA. See LICENSE for details.");
 
             ImGui::EndTabItem();
         }

@@ -217,6 +217,7 @@ token            = ""
 toggle_lens       = "ctrl+alt+z"
 toggle_fullscreen = "ctrl+alt+f"
 turn_off          = "ctrl+alt+x"
+show_settings     = "ctrl+alt+s"
 zoom_in           = "ctrl+alt+plus"
 zoom_out          = "ctrl+alt+minus"
 lens_size_up      = "ctrl+alt+]"
@@ -369,9 +370,13 @@ Config ParseToml(std::string_view text, std::vector<std::string>& warnings) {
         if (auto t = root["update"].as_table()) {
             cfg.update.check_on_startup = GetOr<bool>(*t, "check_on_startup", true);
             cfg.update.auto_download    = GetOr<bool>(*t, "auto_download",    false);
-            cfg.update.owner            = GetOr<std::string>(*t, "owner", "");
+            // Defaults match the struct defaults so any stored "" gets
+            // upgraded to the public upstream on reload.
+            cfg.update.owner            = GetOr<std::string>(*t, "owner", "almakarem");
             cfg.update.repo             = GetOr<std::string>(*t, "repo",  "Magnifier");
             cfg.update.token            = GetOr<std::string>(*t, "token", "");
+            if (cfg.update.owner.empty()) cfg.update.owner = "almakarem";
+            if (cfg.update.repo.empty())  cfg.update.repo  = "Magnifier";
         }
         if (auto t = root["hotkeys"].as_table()) {
             ParseHotkeyTable(*t, cfg, warnings);
@@ -504,6 +509,9 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
     put_hotkey("pan_right",         Action::PanRight);
     put_hotkey("pan_up",            Action::PanUp);
     put_hotkey("pan_down",          Action::PanDown);
+    put_hotkey("show_settings",     Action::ShowSettings);
+    put_hotkey("reload_config",     Action::ReloadConfig);
+    put_hotkey("quit",              Action::Quit);
     root.insert("hotkeys", std::move(hk));
 
     toml::table ctrl;

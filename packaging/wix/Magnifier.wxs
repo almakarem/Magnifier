@@ -9,14 +9,14 @@
   <?define UpgradeCode = "5DF7A9A7-9C92-4D5E-9C2A-3E0B0BAFF55E" ?>
 
   <Package Name="Magnifier"
-           Manufacturer="Magnifier Project"
+           Manufacturer="AMSA"
            Version="$(Version)"
            UpgradeCode="$(UpgradeCode)"
            Scope="perUserOrMachine"
            Compressed="yes"
            InstallerVersion="500">
 
-    <SummaryInformation Description="Magnifier — overlay zoom for streamers" />
+    <SummaryInformation Description="Magnifier - low-latency overlay magnifier for Windows" />
 
     <MajorUpgrade
         DowngradeErrorMessage="A newer version of Magnifier is already installed."
@@ -26,8 +26,8 @@
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <Property Id="ARPPRODUCTICON" Value="MagnifierIcon" />
-    <Property Id="ARPHELPLINK"    Value="https://github.com/local/magnifier" />
-    <Property Id="ARPURLINFOABOUT" Value="https://github.com/local/magnifier" />
+    <Property Id="ARPHELPLINK"    Value="https://github.com/almakarem/Magnifier" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/almakarem/Magnifier" />
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
 
     <ui:WixUI Id="WixUI_InstallDir" />

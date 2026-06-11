@@ -9,10 +9,15 @@
 #include <nlohmann/json.hpp>
 
 #include <Windows.h>
+#include <dwmapi.h>
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstdio>
 #include <fstream>
+
+#pragma comment(lib, "Dwmapi.lib")
 
 namespace fs = std::filesystem;
 
@@ -26,11 +31,10 @@ constexpr UINT    WM_APP_CMD      = WM_APP + 11;
 constexpr UINT    WM_APP_FRAME    = WM_APP + 12;
 constexpr UINT    WM_APP_UPDATE   = WM_APP + 13;  // updater finished (check or dl)
 
-// Tick period for the main loop. 4 ms (~250 Hz) keeps cursor follow visually
-// indistinguishable from native mouse movement on 60/120/144/240 Hz displays.
-// The actual SetWindowPos / MagSetWindowSource rate is naturally bounded by
-// DWM's composition cadence; we just don't want to *under*-feed it.
-constexpr int     kTickPeriodMs   = 4;
+// Fallback tick period (ms) used when we cannot query the panel refresh
+// (e.g. headless WinPE / RDP session with no display). 8 ms = 125 Hz is a
+// safe middle-ground for any modern panel.
+constexpr int     kFallbackTickPeriodMs   = 8;
 // Throttle the ImGui settings window render to roughly display refresh so
 // we don't burn CPU/GPU at 250 Hz when the user is just hovering a slider.
 constexpr int     kSettingsRenderPeriodMs = 16;
@@ -60,7 +64,8 @@ bool App::Initialise(HINSTANCE hinst, const AppOptions& opts) {
 
     // ---- config ----------------------------------------------------------
     auto loaded = LoadConfig(config_path_);
-    cfg_ = std::move(loaded.config);
+    cfg_        = std::move(loaded.config);
+    first_run_  = !loaded.loaded_from_file;
     for (const auto& w : loaded.warnings) spdlog::warn("config: {}", w);
 
     log::Init(cfg_.advanced.log_level);
@@ -149,7 +154,8 @@ bool App::Initialise(HINSTANCE hinst, const AppOptions& opts) {
     tray_.Initialise(hinst, [this](Action a) {
         router_->OnAction(a);
     });
-    tray_.SetTooltip(L"Magnifier — idle");
+    // Real tooltip text is set by RefreshTrayTooltip_() once the hotkeys
+    // table is fully populated (just below, after the welcome toast block).
 
     // ---- settings window --------------------------------------------------
     settings_.SetConfig(cfg_);
@@ -170,6 +176,12 @@ bool App::Initialise(HINSTANCE hinst, const AppOptions& opts) {
     // CREATE_WAITABLE_TIMER_HIGH_RESOLUTION (Win10 1803+) gives us sub-ms
     // accuracy independent of the system scheduler tick. Auto-reset so
     // each MsgWaitForMultipleObjectsEx wait consumes exactly one fire.
+    // We arm it with RefreshTickRate_() so the period matches the actual
+    // monitor refresh - on a 60 Hz panel we tick every ~16 ms instead of
+    // 4 ms, which eliminates the low-zoom ghosting users reported on
+    // high-refresh displays (the previous fixed 4 ms cadence drifted
+    // against DWM's vsync, causing the mag control to be resampled mid-
+    // frame).
     tick_event_ = ::CreateWaitableTimerExW(
         nullptr, nullptr,
         CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
@@ -179,12 +191,8 @@ bool App::Initialise(HINSTANCE hinst, const AppOptions& opts) {
         // than coalesced WM_TIMER).
         tick_event_ = ::CreateWaitableTimerW(nullptr, FALSE, nullptr);
     }
-    if (tick_event_) {
-        LARGE_INTEGER due{};
-        due.QuadPart = -10000LL * kTickPeriodMs; // first fire after one period
-        ::SetWaitableTimer(tick_event_, &due, kTickPeriodMs,
-                           nullptr, nullptr, FALSE);
-    } else {
+    RefreshTickRate_();
+    if (!tick_event_) {
         spdlog::warn("CreateWaitableTimerExW failed; falling back to WM_TIMER");
     }
     last_tick_  = std::chrono::steady_clock::now();
@@ -195,10 +203,36 @@ bool App::Initialise(HINSTANCE hinst, const AppOptions& opts) {
 
     // ---- startup command --------------------------------------------------
     if (opts.startup_command) {
-        // Apply locally — we are the running instance.
+        // Apply locally - we are the running instance.
         OnIpcCommand(*opts.startup_command);
     }
     (void)opts.start_minimized;   // tray-only by default; nothing to suppress.
+
+    // ---- tray hover summary + first-run welcome toast --------------------
+    // Tooltip mirrors the currently-bound hotkeys so a quick hover answers
+    // "what's the toggle key again?" without opening Settings. On a fresh
+    // install (no config.toml present yet) we also fire a one-shot tray
+    // balloon naming the two most important shortcuts; persisting that
+    // first-run flag is implicit in the act of writing the default config
+    // file, so subsequent launches stay quiet.
+    RefreshTrayTooltip_();
+    if (first_run_) {
+        std::wstring toggle = L"(unbound)";
+        std::wstring settings = L"(unbound)";
+        if (auto it = cfg_.hotkeys.find(Action::ToggleLens);
+            it != cfg_.hotkeys.end() && it->second.is_bound()) {
+            toggle = Utf8ToWide(it->second.to_human());
+        }
+        if (auto it = cfg_.hotkeys.find(Action::ShowSettings);
+            it != cfg_.hotkeys.end() && it->second.is_bound()) {
+            settings = Utf8ToWide(it->second.to_human());
+        }
+        std::wstring body =
+            L"Toggle lens:  " + toggle + L"\r\n" +
+            L"Settings:     " + settings + L"\r\n" +
+            L"Right-click the tray icon for the full menu.";
+        tray_.ShowBalloon(L"Magnifier is running", body);
+    }
 
     spdlog::info("Magnifier ready.");
     return true;
@@ -358,6 +392,19 @@ void App::OnTick_() {
     state_.Tick(dt);
     mag_.Tick();
 
+    // Pin the next tick to the panel's vblank. Without this, our timer
+    // period (e.g. 4 ms on a 240 Hz panel) drifts against DWM's actual
+    // composition cadence, so every few seconds we feed MagSetWindowSource
+    // a new rectangle in the middle of a scan-out and the user sees a
+    // smeared ghost trail behind fast cursor moves. DwmFlush blocks until
+    // the next DWM composition starts; cheap, well-supported on Win10+,
+    // and returns immediately if DWM is unavailable. Skipping it when no
+    // magnification mode is active avoids the (small) wakeup cost while
+    // the app is idle in the tray.
+    if (state_.GetSnapshot().mode != MagMode::Off) {
+        ::DwmFlush();
+    }
+
     if (settings_.IsVisible()) {
         // Throttle the (relatively heavy) ImGui+D3D11 render to ~60 Hz
         // independent of the magnifier tick rate.
@@ -378,6 +425,9 @@ void App::OnDisplayChange_() {
     b.bottom = b.top  + ::GetSystemMetrics(SM_CYVIRTUALSCREEN);
     state_.SetBounds(b);
     spdlog::info("Display change: virtual screen now {}x{}", b.width(), b.height());
+    // A monitor was added / removed / changed mode - re-pick the right
+    // refresh rate. Cheap (one EnumDisplaySettings call).
+    RefreshTickRate_();
 }
 
 void App::OnPowerEvent_(WPARAM event) {
@@ -412,9 +462,7 @@ void App::SetMode(MagMode mode) {
         ::SetPriorityClass(::GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
     }
 
-    tray_.SetTooltip(L"Magnifier — " +
-        std::wstring(mode == MagMode::Off ? L"idle" :
-                     mode == MagMode::Lens ? L"lens" : L"full-screen"));
+    RefreshTrayTooltip_();
 }
 
 void App::ToggleMode(MagMode mode) {
@@ -578,6 +626,8 @@ void App::ApplyConfig_(const Config& cfg) {
     ApplyUpdateSettings_();
 
     SaveConfig(config_path_, cfg_);
+    // Re-bound hotkeys -> tooltip text changes too.
+    RefreshTrayTooltip_();
 }
 
 void App::ApplyHotkeys_() {
@@ -714,6 +764,87 @@ void App::StartUpdateInstall_() {
         update_status_.error = "Failed to launch msiexec.";
         if (app_wnd_) ::PostMessageW(app_wnd_, WM_APP_UPDATE, 0, 0);
     }
+}
+
+// ----------------------------------------------------------------------------
+// Tick-rate auto-tuning
+// ----------------------------------------------------------------------------
+// Resolves the refresh rate of the monitor under the lens centre (or, when
+// the lens is idle, under the cursor) and re-arms the high-resolution
+// waitable timer so we tick once per panel refresh. Older builds used a
+// fixed 4 ms period which over-fed the magnification control on 60/120 Hz
+// panels and drifted against DWM's vsync on 240 Hz, producing the low-zoom
+// ghost trails users reported. Combined with DwmFlush() in OnTick_ this
+// pins the magnifier loop to the panel's scan-out cadence.
+void App::RefreshTickRate_() {
+    if (!tick_event_) return;
+
+    int hz = 0;
+    POINT pt{};
+    HMONITOR mon = nullptr;
+    if (::GetCursorPos(&pt)) {
+        mon = ::MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    }
+    if (!mon) mon = ::MonitorFromWindow(nullptr, MONITOR_DEFAULTTOPRIMARY);
+    if (mon) {
+        MONITORINFOEXW mi{};
+        mi.cbSize = sizeof(mi);
+        if (::GetMonitorInfoW(mon, &mi)) {
+            DEVMODEW dm{};
+            dm.dmSize = sizeof(dm);
+            if (::EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) &&
+                dm.dmDisplayFrequency > 1) {
+                hz = static_cast<int>(dm.dmDisplayFrequency);
+            }
+        }
+    }
+    if (hz <= 0) hz = 60;   // safe default
+
+    // Wake slightly before vblank so DwmFlush() does the final pin. Cap
+    // at 2 ms minimum so an exotic 500 Hz display still leaves room for
+    // other work between ticks.
+    int period = static_cast<int>(std::lround(1000.0 / hz)) - 1;
+    if (period < 2)  period = 2;
+    if (period > 33) period = 33;   // never tick slower than ~30 Hz
+    if (hz == refresh_hz_ && period == tick_period_ms_) {
+        return;   // already armed correctly
+    }
+
+    refresh_hz_     = hz;
+    tick_period_ms_ = period;
+
+    LARGE_INTEGER due{};
+    due.QuadPart = -10000LL * period;   // first fire after one period
+    ::SetWaitableTimer(tick_event_, &due, period, nullptr, nullptr, FALSE);
+    spdlog::info("Tick rate: {} Hz panel -> {} ms period", hz, period);
+}
+
+// ----------------------------------------------------------------------------
+// Tray tooltip
+// ----------------------------------------------------------------------------
+// Builds "Magnifier - <mode> | toggle: Ctrl+Alt+Z | settings: Ctrl+Alt+S"
+// from the currently-applied hotkey bindings so users get a hint on hover
+// without opening Settings. The tray API caps NIF_TIP at 127 wide chars;
+// we truncate gracefully if a user binds a wildly long key combo.
+void App::RefreshTrayTooltip_() {
+    const auto snap = state_.GetSnapshot();
+    const wchar_t* mode_label =
+        snap.mode == MagMode::Off       ? L"idle" :
+        snap.mode == MagMode::Lens      ? L"lens" :
+                                          L"full-screen";
+
+    auto key_for = [&](Action a) -> std::wstring {
+        auto it = cfg_.hotkeys.find(a);
+        if (it == cfg_.hotkeys.end() || !it->second.is_bound()) return L"-";
+        return Utf8ToWide(it->second.to_human());
+    };
+
+    std::wstring tip = L"Magnifier - ";
+    tip += mode_label;
+    tip += L"  |  toggle: " + key_for(Action::ToggleLens);
+    tip += L"  |  settings: " + key_for(Action::ShowSettings);
+    if (tip.size() > 120) tip.resize(120);   // leave room for ellipsis
+    tray_.SetTooltip(tip);
 }
 
 } // namespace magnifier

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Direct email
+    url: mailto:AMSAbualmakarem@gmail.com
+    about: For security reports or questions you would rather not file publicly.
+  - name: Releases
+    url: https://github.com/almakarem/Magnifier/releases
+    about: Grab the latest version before filing a bug.

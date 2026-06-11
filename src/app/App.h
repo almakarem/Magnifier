@@ -78,6 +78,17 @@ private:
     void RemovePidFile_() const;
     std::string BuildStatusJson_() const;
 
+    // Pick the current display refresh rate of the monitor under the lens
+    // centre (falls back to 60 Hz if Windows refuses to tell us) and
+    // re-arm the high-resolution waitable timer to match. Called from
+    // Initialise() and from WM_DISPLAYCHANGE so multi-monitor moves
+    // between e.g. a 60 Hz and a 240 Hz panel pick up the new rate.
+    void RefreshTickRate_();
+    // Build "Magnifier - <mode> | toggle: Ctrl+Alt+Z | settings: Ctrl+Alt+S"
+    // from the currently-applied hotkey bindings. Tooltip is capped at
+    // 127 chars (NIF_TIP buffer size).
+    void RefreshTrayTooltip_();
+
     HINSTANCE                       hinst_      = nullptr;
     HWND                            app_wnd_    = nullptr;     // message-only
     HANDLE                          tick_event_ = nullptr;     // high-res waitable timer
@@ -108,6 +119,17 @@ private:
     bool                            controller_running_ = false;
     std::chrono::steady_clock::time_point last_tick_;
     std::chrono::steady_clock::time_point last_settings_render_;
+
+    // True only when LoadConfig had to materialise the embedded defaults
+    // (no config.toml on disk). Used to fire the welcome tray balloon
+    // exactly once per fresh install / portable extraction.
+    bool                            first_run_  = false;
+    // Currently-armed tick period in ms (matches the display refresh of
+    // the monitor the lens is on). Recomputed on WM_DISPLAYCHANGE.
+    int                             tick_period_ms_ = 8;
+    // Last detected refresh rate (Hz) - logged on change so users
+    // hunting ghosting can see the value we picked.
+    int                             refresh_hz_     = 0;
 
     MagMode                         last_mode_ = MagMode::Lens;   // for Toggle
 

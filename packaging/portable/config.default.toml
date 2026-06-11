@@ -88,6 +88,9 @@ token            = ""
 toggle_lens        = "ctrl+alt+z"
 toggle_fullscreen  = "ctrl+alt+f"
 turn_off           = "ctrl+alt+x"
+# Opens the Settings window. Press the same combo again, or click Close,
+# to dismiss it.
+show_settings      = "ctrl+alt+s"
 zoom_in            = "ctrl+alt+plus"
 zoom_out           = "ctrl+alt+minus"
 lens_size_up       = "ctrl+alt+]"

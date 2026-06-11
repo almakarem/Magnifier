@@ -1,0 +1,96 @@
+name: Bug report
+description: Magnifier crashes, hangs, displays incorrectly, or misbehaves in a reproducible way.
+title: "[Bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Before submitting, please:
+
+        - Update to the latest release from https://github.com/almakarem/Magnifier/releases
+        - Search existing issues to avoid duplicates.
+        - Grab the latest log file from `%LOCALAPPDATA%\Magnifier\logs\` and any crash dump from `%LOCALAPPDATA%\Magnifier\crashes\`.
+
+  - type: input
+    id: version
+    attributes:
+      label: Magnifier version
+      description: "Found in Settings → About, or run `magnifier --version`."
+      placeholder: "e.g. 0.1.4"
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: "Run `winver` and paste the version + build number."
+      placeholder: "e.g. Windows 11 Pro 24H2, build 26100.2314"
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU vendor and driver
+      description: "From Device Manager → Display adapters, or `dxdiag` → Display tab."
+      placeholder: "e.g. NVIDIA RTX 4070, driver 566.36 / AMD Radeon 7900 XT 24.10.1 / Intel Arc A770 31.0.101.5763"
+    validations:
+      required: true
+
+  - type: input
+    id: display
+    attributes:
+      label: Monitor refresh rate and resolution
+      description: "If you use multiple monitors, list each (rate + resolution + scaling)."
+      placeholder: "e.g. 2560×1440 @ 240 Hz, 150% scale  |  1920×1080 @ 60 Hz, 100% scale"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: "What did you do? Be as specific as possible."
+      placeholder: |
+        1. Launch Magnifier.
+        2. Press Ctrl+Alt+Z to toggle the lens.
+        3. Move the cursor in a wide horizontal sweep across the screen.
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: "Screenshots or short screen recordings are extremely helpful."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log excerpt
+      description: |
+        Paste the tail of `%LOCALAPPDATA%\Magnifier\logs\magnifier.log` (last 50–100 lines is usually enough).
+        If a crash dump was produced, attach the `.dmp` from `%LOCALAPPDATA%\Magnifier\crashes\`.
+      render: shell
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have searched existing issues for duplicates.
+          required: true
+        - label: I am on the latest release (or a recent commit) of Magnifier.
+          required: true

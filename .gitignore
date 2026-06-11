@@ -55,3 +55,7 @@ install_manifest.txt
 
 # stray dev logs
 gh-auth-out.txt
+# transient release tooling scratch files
+release-body.json
+release-notes.md.tmp
+
