@@ -15,8 +15,8 @@ IDI_APP ICON "Magnifier.ico"
 #endif
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION    0,1,5,0
-PRODUCTVERSION 0,1,5,0
+FILEVERSION    0,1,6,0
+PRODUCTVERSION 0,1,6,0
 FILEFLAGSMASK  0x3fL
 #ifdef _DEBUG
 FILEFLAGS      0x1L
@@ -33,12 +33,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName",      "AMSA"
             VALUE "FileDescription",  "Low-latency overlay magnifier for Windows"
-            VALUE "FileVersion",      "0.1.5.0"
+            VALUE "FileVersion",      "0.1.6.0"
             VALUE "InternalName",     "Magnifier"
             VALUE "LegalCopyright",   "Copyright (c) 2026 AMSA - MIT License"
             VALUE "OriginalFilename", "Magnifier.exe"
             VALUE "ProductName",      "Magnifier"
-            VALUE "ProductVersion",   "0.1.5.0"
+            VALUE "ProductVersion",   "0.1.6.0"
         END
     END
     BLOCK "VarFileInfo"

@@ -8,7 +8,27 @@ and this project follows a loose [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
-## [0.1.5] - 2026-06-11
+## [0.1.6] - 2026-06-13
+
+### Added
+- **DPI-aware Settings window.** The Settings window now queries
+  `GetDpiForWindow` on open, sizes itself to `760×560` logical
+  pixels × the monitor's DPI scale, and scales ImGui fonts and
+  widget spacing proportionally. On a 4K display at 200% scale the
+  window opens at 1520×1120 with proportionally larger text — no
+  more needing a magnifier to use Magnifier.
+  Moving the window across monitors with different DPI scales is
+  also handled: `WM_DPICHANGED` triggers a window resize + font
+  rebuild so the UI never appears blurry or undersized after a
+  cross-monitor drag.
+- **PlayStation controller guidance in Diagnostics tab.** The
+  reading guide now explicitly explains that DS4 / DualSense
+  controllers will show as *Gamepads: 0* in Windows because Sony
+  does not implement XInput, and that the fix is to install
+  **DS4Windows** (https://github.com/Ryochan7/DS4Windows). It also
+  clarifies that Steam's *PlayStation Controller Support* option
+  does **not** provide a system-wide XInput emulation and will not
+  fix the issue for Magnifier.## [0.1.5] - 2026-06-11
 
 ### Fixed
 - **Lens stops following the mouse after a keyboard pan or controller
@@ -140,7 +160,8 @@ Initial public release.
   Capture, Controller, IPC, Advanced, Updates, Hotkeys, Diagnostics,
   About.
 
-[Unreleased]: https://github.com/almakarem/Magnifier/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/almakarem/Magnifier/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/almakarem/Magnifier/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/almakarem/Magnifier/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/almakarem/Magnifier/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/almakarem/Magnifier/compare/v0.1.2...v0.1.3

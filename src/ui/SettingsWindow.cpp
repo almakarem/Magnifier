@@ -73,6 +73,36 @@ struct SettingsWindow::Impl {
     // mutex so the UI thread can render a stable snapshot.
     std::mutex      diag_mu;
     ControllerFrame diag_frame{};
+
+    // ---- DPI / scaling -----------------------------------------------------
+    // Logical base window size at 100% (96 DPI). We multiply by dpi_scale to
+    // get physical pixels, and we rebuild the ImGui font at base_font_px *
+    // dpi_scale so text is crisp on every monitor.
+    static constexpr int   kBaseW        = 760;
+    static constexpr int   kBaseH        = 560;
+    static constexpr float kBaseFontPx   = 15.0f;
+    float dpi_scale = 1.0f;
+
+    // (Re)build the ImGui default font at the current dpi_scale and apply
+    // per-widget padding / rounding scale. Call after CreateContext and
+    // after any WM_DPICHANGED. Must be on the UI thread.
+    void RebuildFontsForDpi() {
+        ImGuiIO& io = ImGui::GetIO();
+        io.Fonts->Clear();
+        io.Fonts->AddFontDefault();
+        // Override the default 13 px with a DPI-proportional size. The
+        // default font is a rasterised bitmap so we scale via
+        // FontGlobalScale, which ImGui applies at draw time without
+        // requiring a rebuild of the atlas texture.
+        // dpi_scale = 1.0 @ 96 DPI, 1.25 @ 120 DPI, 2.0 @ 192 DPI ...
+        io.FontGlobalScale = (kBaseFontPx * dpi_scale) / 13.0f;
+
+        // Scale all style sizes (padding, rounding, item spacing, ...) so
+        // the whole UI breathes proportionally on high-DPI displays. We
+        // re-apply StyleColorsDark first to reset any previous scaling.
+        ImGui::StyleColorsDark();
+        ImGui::GetStyle().ScaleAllSizes(dpi_scale);
+    }
     // WGI probe results pushed less frequently (every few ticks) by App.
     unsigned        wgi_gamepad_count = 0;
     unsigned        wgi_raw_count     = 0;
@@ -186,6 +216,22 @@ struct SettingsWindow::Impl {
                     self->ResizeBackBuffer(LOWORD(l), HIWORD(l));
                 }
                 return 0;
+            case WM_DPICHANGED: {
+                // lParam = suggested RECT at the new DPI. Resize to it so
+                // the window doesn't shrink / grow mid-drag on a per-monitor
+                // setup. Also rebuild fonts so text stays sharp.
+                const RECT* r = reinterpret_cast<const RECT*>(l);
+                ::SetWindowPos(h, nullptr,
+                    r->left, r->top,
+                    r->right  - r->left,
+                    r->bottom - r->top,
+                    SWP_NOZORDER | SWP_NOACTIVATE);
+                if (self) {
+                    self->dpi_scale = static_cast<float>(HIWORD(w)) / 96.0f;
+                    if (self->imgui_init) self->RebuildFontsForDpi();
+                }
+                return 0;
+            }
             case WM_SYSCOMMAND:
                 // Disable Alt-application-menu — ImGui handles its own menus.
                 if ((w & 0xfff0) == SC_KEYMENU) return 0;
@@ -258,12 +304,33 @@ void SettingsWindow::Show() {
 
         p_->hwnd = ::CreateWindowExW(0, kClassName, kWindowTitle,
             WS_OVERLAPPEDWINDOW,
-            CW_USEDEFAULT, CW_USEDEFAULT, 720, 540,
+            CW_USEDEFAULT, CW_USEDEFAULT,
+            Impl::kBaseW, Impl::kBaseH,
             nullptr, nullptr, wc.hInstance, nullptr);
         if (!p_->hwnd) {
             spdlog::error("SettingsWindow: CreateWindowExW failed: {}", LastErrorString());
             return;
         }
+
+        // Resolve the monitor DPI now that the window has an HWND (Windows
+        // assigns it to a monitor before returning from CreateWindowExW).
+        // GetDpiForWindow is available on Win10 1607+; fall back to 96 on
+        // older builds.
+        {
+            using GetDpiFn = UINT (WINAPI*)(HWND);
+            HMODULE user32 = ::GetModuleHandleW(L"user32.dll");
+            auto fn = user32
+                ? reinterpret_cast<GetDpiFn>(::GetProcAddress(user32, "GetDpiForWindow"))
+                : nullptr;
+            const UINT dpi = fn ? fn(p_->hwnd) : 96u;
+            p_->dpi_scale  = static_cast<float>(dpi) / 96.0f;
+            // Resize the window to the correct physical size for this monitor.
+            const int w_px = static_cast<int>(Impl::kBaseW * p_->dpi_scale);
+            const int h_px = static_cast<int>(Impl::kBaseH * p_->dpi_scale);
+            ::SetWindowPos(p_->hwnd, nullptr, 0, 0, w_px, h_px,
+                           SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+
         // GWLP_USERDATA must be set BEFORE the swap chain is created — the
         // wndproc may receive WM_SIZE during D3D11CreateDeviceAndSwapChain.
         ::SetWindowLongPtrW(p_->hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(p_.get()));
@@ -276,9 +343,11 @@ void SettingsWindow::Show() {
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
-        ImGui::StyleColorsDark();
         ImGui_ImplWin32_Init(p_->hwnd);
         ImGui_ImplDX11_Init(p_->device.Get(), p_->ctx.Get());
+        // Build fonts + style at the actual monitor DPI so the window is
+        // readable on 4K / high-DPI displays out of the box.
+        p_->RebuildFontsForDpi();
         p_->imgui_init = true;
     }
 
@@ -605,13 +674,24 @@ bool SettingsWindow::Render() {
 
             ImGui::Spacing();
             ImGui::TextWrapped(
-                "Reading guide:\n"
-                "  * Gamepads > 0  -> Windows sees your pad as a standard gamepad. Should Just Work.\n"
-                "  * Gamepads = 0 AND Raw > 0  -> Windows sees a HID gamepad but won't promote it.\n"
-                "    We use the raw fallback (axes only). Buttons may map differently per vendor.\n"
-                "  * Both 0  -> Windows doesn't see the pad at all. Pair via Settings -> Bluetooth,\n"
-                "    or install vendor drivers (e.g. DS4Windows for DualShock/DualSense).\n"
-                "Steam sees pads via its own HID driver - Steam working doesn't imply Windows sees it.");
+                "PlayStation controllers (DualShock 4 / DualSense):\n"
+                "  Windows does not expose Sony controllers as XInput or standard"
+                " gamepads, so they show as 'Gamepads: 0' above even when paired.\n"
+                "  Fix: install DS4Windows (https://github.com/Ryochan7/DS4Windows).\n"
+                "  DS4Windows wraps your PS controller as a virtual Xbox pad that\n"
+                "  Magnifier picks up immediately via XInput. Steam's 'PlayStation\n"
+                "  Controller Support' does NOT help here because it operates\n"
+                "  inside Steam's own overlay, not system-wide.\n"
+                "\n"
+                "Xbox / generic XInput controllers:\n"
+                "  Should show Gamepads >= 1 when connected. If not, try a\n"
+                "  different USB port or check Device Manager for driver issues.\n"
+                "\n"
+                "Other controllers (joysticks, fight sticks, racing wheels):\n"
+                "  If Gamepads = 0 AND Raw > 0, the controller is seen as a generic\n"
+                "  HID device. Left-stick analogue movement will work; button\n"
+                "  actions may not map correctly. Rebind from the Hotkeys tab or\n"
+                "  use DS4Windows / x360ce to wrap it as XInput.");
 
             ImGui::EndTabItem();
         }
