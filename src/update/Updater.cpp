@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cstring>
 #include <fstream>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <thread>
