@@ -10,6 +10,7 @@
 #include "mag/StateModel.h"
 #include "ui/SettingsWindow.h"
 #include "ui/TrayIcon.h"
+#include "ui/ZoomHud.h"
 #include "update/Updater.h"
 
 #include <Windows.h>
@@ -104,6 +105,7 @@ private:
     IpcServer                       ipc_;
     TrayIcon                        tray_;
     SettingsWindow                  settings_;
+    ZoomHud                         zoom_hud_;
     Updater                         updater_;
 
     // Latest update-check result (owned by UI thread). When `update_available`
@@ -137,6 +139,8 @@ private:
     bool                            last_mouse_pt_valid_ = false;
 
     MagMode                         last_mode_ = MagMode::Lens;   // for Toggle
+    // Last zoom shown on the zoom HUD; used to detect changes worth flashing.
+    float                           last_hud_zoom_ = 0.0f;
 
     // Cross-thread command queue. Workers (IPC, controller poll) push here;
     // the UI thread drains it in WM_APP_DRAIN.

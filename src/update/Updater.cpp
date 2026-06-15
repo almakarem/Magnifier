@@ -11,8 +11,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstring>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <thread>
 #include <vector>
@@ -317,6 +319,149 @@ bool EndsWithICase(std::string_view s, std::string_view suffix) {
     return true;
 }
 
+// Extract an UpdateInfo from a single GitHub "release" JSON object (the shape
+// returned by both /releases/latest and each element of /releases).
+UpdateInfo ParseRelease(const nlohmann::json& j) {
+    UpdateInfo info;
+    info.tag_name     = j.value("tag_name", "");
+    info.release_name = j.value("name", "");
+    info.release_url  = j.value("html_url", "");
+    info.notes        = j.value("body", "");
+    info.version      = info.tag_name;
+    if (!info.version.empty() && (info.version[0] == 'v' || info.version[0] == 'V')) {
+        info.version.erase(0, 1);
+    }
+    if (j.contains("assets") && j["assets"].is_array()) {
+        for (const auto& a : j["assets"]) {
+            const std::string name = a.value("name", "");
+            const std::string url  = a.value("url",  "");   // API URL
+            const int64_t     size = a.value("size", int64_t{0});
+            if (EndsWithICase(name, ".msi")) {
+                info.msi_asset_name = name;
+                info.msi_asset_url  = url;
+                info.msi_asset_size = size;
+            } else if (EndsWithICase(name, ".zip")) {
+                info.zip_asset_name = name;
+                info.zip_asset_url  = url;
+                info.zip_asset_size = size;
+            }
+        }
+    }
+    return info;
+}
+
+// Perform the actual release check (runs on the worker thread). Queries
+// /releases/latest first, retrying a few times on transient 5xx / network
+// errors. GitHub's /releases/latest endpoint occasionally returns 504 Gateway
+// Timeout while the rest of the API (including /releases) is perfectly healthy
+// — in that case we fall back to listing /releases and selecting the newest
+// published, non-draft, non-prerelease release ourselves.
+UpdateCheckResult RunCheck(const Updater::Settings& s) {
+    UpdateCheckResult res;
+    res.current_version = s.current_version;
+
+    const std::wstring base        = L"/repos/" + EscapeSegment(s.owner) +
+                                     L"/" + EscapeSegment(s.repo);
+    const std::wstring latest_path = base + L"/releases/latest";
+
+    std::vector<std::wstring> headers = {
+        L"Accept: application/vnd.github+json",
+        L"X-GitHub-Api-Version: 2022-11-28",
+    };
+    if (!s.token.empty()) {
+        headers.push_back(L"Authorization: Bearer " + Utf8ToWide(s.token));
+    }
+
+    // Primary endpoint, with retries on transient failures.
+    HttpResponse r;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        r = HttpGetJson(kHost, kPort, latest_path, headers);
+        const bool transient = !r.error.empty() || (r.status >= 500 && r.status <= 599);
+        if (!transient) break;
+        if (attempt < 2) std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    // Definitive, non-retryable statuses from the primary endpoint.
+    if (r.error.empty() && r.status == 404) {
+        res.error = "Release not found (404). For a private repo, set update.token in config.";
+        return res;
+    }
+    if (r.error.empty() && (r.status == 401 || r.status == 403)) {
+        res.error = "Auth failed (" + std::to_string(r.status) +
+                    "). Check your update.token (needs Contents: Read on the repo).";
+        return res;
+    }
+
+    std::optional<nlohmann::json> chosen;
+    if (r.error.empty() && r.status >= 200 && r.status < 300) {
+        try {
+            chosen = nlohmann::json::parse(r.body);
+        } catch (const std::exception& e) {
+            res.error = std::string("JSON parse failed: ") + e.what();
+            return res;
+        }
+    }
+
+    // Fallback: /releases/latest unavailable -> pick newest from /releases.
+    if (!chosen) {
+        HttpResponse lr = HttpGetJson(kHost, kPort, base + L"/releases", headers);
+        if (lr.error.empty() && lr.status >= 200 && lr.status < 300) {
+            try {
+                auto arr = nlohmann::json::parse(lr.body);
+                if (arr.is_array()) {
+                    std::string best_ver;
+                    for (const auto& rel : arr) {
+                        if (rel.value("draft", false) || rel.value("prerelease", false)) {
+                            continue;
+                        }
+                        std::string ver = rel.value("tag_name", "");
+                        if (!ver.empty() && (ver[0] == 'v' || ver[0] == 'V')) ver.erase(0, 1);
+                        if (ver.empty()) continue;
+                        if (best_ver.empty() ||
+                            Updater::CompareVersions(ver, best_ver) > 0) {
+                            best_ver = ver;
+                            chosen   = rel;
+                        }
+                    }
+                }
+            } catch (...) {
+                // fall through to the error path below
+            }
+        }
+        if (chosen) {
+            spdlog::info("Updater: /releases/latest unavailable (status {}{}); "
+                         "used /releases list fallback",
+                         r.status, r.error.empty() ? std::string() : ", " + r.error);
+        }
+    }
+
+    if (!chosen) {
+        if (!r.error.empty()) {
+            res.error = r.error;
+        } else if (r.status >= 500) {
+            res.error = "GitHub API temporarily unavailable (HTTP " +
+                        std::to_string(r.status) + "). Please try again later.";
+        } else {
+            res.error = "HTTP " + std::to_string(r.status);
+        }
+        spdlog::warn("Updater: check failed: {}", res.error);
+        return res;
+    }
+
+    try {
+        UpdateInfo info = ParseRelease(*chosen);
+        res.ok               = true;
+        res.update_available = !info.version.empty() &&
+            Updater::CompareVersions(info.version, s.current_version) > 0;
+        spdlog::info("Updater: current={} latest={} available={}",
+                     s.current_version, info.version, res.update_available);
+        res.info = std::move(info);
+    } catch (const std::exception& e) {
+        res.error = std::string("JSON parse failed: ") + e.what();
+    }
+    return res;
+}
+
 } // namespace
 
 // ===========================================================================
@@ -390,88 +535,8 @@ void Updater::CheckAsync(CheckCallback cb) {
     }
 
     std::thread([this, s = std::move(s), cb = std::move(cb)]() {
-        UpdateCheckResult res;
-        res.current_version = s.current_version;
-
-        const std::wstring path = L"/repos/" + EscapeSegment(s.owner) +
-                                  L"/" + EscapeSegment(s.repo) +
-                                  L"/releases/latest";
-
-        std::vector<std::wstring> headers = {
-            L"Accept: application/vnd.github+json",
-            L"X-GitHub-Api-Version: 2022-11-28",
-        };
-        if (!s.token.empty()) {
-            headers.push_back(L"Authorization: Bearer " + Utf8ToWide(s.token));
-        }
-
-        HttpResponse r = HttpGetJson(kHost, kPort, path, headers);
+        UpdateCheckResult res = RunCheck(s);
         p_->busy.store(false);
-
-        if (!r.error.empty()) {
-            res.error = r.error;
-            spdlog::warn("Updater: HTTP error: {}", r.error);
-            if (cb) cb(res);
-            return;
-        }
-        if (r.status == 404) {
-            res.error = "Release not found (404). For a private repo, set update.token in config.";
-            if (cb) cb(res);
-            return;
-        }
-        if (r.status == 401 || r.status == 403) {
-            res.error = "Auth failed (" + std::to_string(r.status) +
-                        "). Check your update.token (needs Contents: Read on the repo).";
-            if (cb) cb(res);
-            return;
-        }
-        if (r.status < 200 || r.status >= 300) {
-            res.error = "HTTP " + std::to_string(r.status);
-            if (cb) cb(res);
-            return;
-        }
-
-        try {
-            auto j = nlohmann::json::parse(r.body);
-            UpdateInfo info;
-            info.tag_name     = j.value("tag_name", "");
-            info.release_name = j.value("name", "");
-            info.release_url  = j.value("html_url", "");
-            info.notes        = j.value("body", "");
-            info.version      = info.tag_name;
-            if (!info.version.empty() && (info.version[0] == 'v' || info.version[0] == 'V')) {
-                info.version.erase(0, 1);
-            }
-
-            if (j.contains("assets") && j["assets"].is_array()) {
-                for (const auto& a : j["assets"]) {
-                    const std::string name = a.value("name", "");
-                    const std::string url  = a.value("url",  "");      // API URL
-                    const int64_t     size = a.value("size", int64_t{0});
-                    if (EndsWithICase(name, ".msi")) {
-                        info.msi_asset_name = name;
-                        info.msi_asset_url  = url;
-                        info.msi_asset_size = size;
-                    } else if (EndsWithICase(name, ".zip")) {
-                        info.zip_asset_name = name;
-                        info.zip_asset_url  = url;
-                        info.zip_asset_size = size;
-                    }
-                }
-            }
-
-            res.ok = true;
-            res.info = std::move(info);
-            res.update_available =
-                !res.info->version.empty() &&
-                CompareVersions(res.info->version, s.current_version) > 0;
-
-            spdlog::info("Updater: current={} latest={} available={}",
-                         s.current_version, res.info->version, res.update_available);
-        } catch (const std::exception& e) {
-            res.error = std::string("JSON parse failed: ") + e.what();
-        }
-
         if (cb) cb(res);
     }).detach();
 }

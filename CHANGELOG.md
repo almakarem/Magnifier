@@ -8,6 +8,58 @@ and this project follows a loose [Semantic Versioning](https://semver.org/spec/v
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-06-15
+
+### Added
+- **Themed Settings window.** The ImGui UI now ships a branded palette
+  (rounded corners, generous spacing, and an accent colour driven from
+  the configured lens border colour, default cyan `#00E5FF`) instead of
+  the stock debug-window look. A **Light theme** toggle on the General
+  tab switches between dark and light and applies instantly.
+- **"Start with Windows" toggle** (Settings → General). Registers a
+  per-user `HKCU\…\Run` entry that launches Magnifier minimised at
+  login; never requires admin. Persisted as `general.start_with_windows`
+  in `config.toml` and kept in sync on every settings save. Matches the
+  value the MSI's optional `STARTATLOGIN` component writes.
+- **"High process priority" toggle** (Settings → General). Surfaces the
+  existing `general.active_priority` setting in the UI and now applies
+  it live — if a magnification mode is already active, flipping it takes
+  effect immediately instead of waiting for the next mode toggle.
+- **Border / accent colour picker** (Settings → Lens). Edits
+  `lens.border_color_hex` and re-themes the UI accent live.
+- **In-overlay zoom HUD.** A small "N.N×" badge fades in near the top of
+  the active monitor whenever the zoom changes and fades out shortly
+  after it settles. It is a self-contained click-through overlay, kept
+  out of OBS / screen capture (`WDA_EXCLUDEFROMCAPTURE`) like the lens,
+  and isolated from the magnification render path.
+
+### Changed
+- **Settings `Render()` refactored** into one method per tab
+  (`RenderGeneralTab_`, `RenderLensTab_`, …). No behavioural change;
+  purely improves maintainability of the previously ~390-line function.
+
+### Fixed
+- **"Start minimised" was effectively always on.** With the setting
+  *off*, a normal launch still sat silently in the tray because nothing
+  ever opened a window on startup — only the *second* launch surfaced
+  the Settings window (via single-instance forwarding). A first launch
+  that isn't asked to start minimised (and has no startup command) now
+  opens the Settings window. Autostart launches still pass
+  `--start-minimized` and stay quiet.
+- **Update check failing with "HTTP 504".** GitHub's
+  `/releases/latest` endpoint intermittently returns `504 Gateway
+  Timeout` even while the rest of the API (including `/releases`) is
+  healthy, which surfaced as a bare `Error: http 504` in the Updates
+  tab. The updater now retries transient 5xx/network failures and, if
+  `/releases/latest` is still unavailable, falls back to listing
+  `/releases` and selecting the newest published (non-draft,
+  non-prerelease) release itself. Error messages for genuine 5xx
+  outages are now clearer too.
+
+### Build
+- `CMakeLists.txt` project version bumped to **0.1.7**.
+- Added `src/ui/ZoomHud.{cpp,h}` to `magnifier_core`.
+
 ## [0.1.6] - 2026-06-13
 
 ### Added
@@ -160,7 +212,8 @@ Initial public release.
   Capture, Controller, IPC, Advanced, Updates, Hotkeys, Diagnostics,
   About.
 
-[Unreleased]: https://github.com/almakarem/Magnifier/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/almakarem/Magnifier/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/almakarem/Magnifier/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/almakarem/Magnifier/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/almakarem/Magnifier/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/almakarem/Magnifier/compare/v0.1.3...v0.1.4

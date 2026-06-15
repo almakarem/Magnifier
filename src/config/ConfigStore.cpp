@@ -160,9 +160,12 @@ static constexpr std::string_view kEmbeddedDefaultToml = R"TOML(
 schema_version = 1
 
 [general]
-start_minimized   = false
-restore_last_mode = true
-active_priority   = "above_normal"
+start_minimized    = false
+restore_last_mode  = true
+# Register a per-user login entry (HKCU\...\Run) so Magnifier starts minimised
+# with Windows. Toggle from Settings > General; never requires admin.
+start_with_windows = false
+active_priority    = "above_normal"
 
 [lens]
 width            = 640
@@ -335,9 +338,10 @@ Config ParseToml(std::string_view text, std::vector<std::string>& warnings) {
         }
 
         if (auto t = root["general"].as_table()) {
-            cfg.general.start_minimized   = GetOr<bool>(*t, "start_minimized", false);
-            cfg.general.restore_last_mode = GetOr<bool>(*t, "restore_last_mode", true);
-            cfg.general.active_priority   = GetOr<std::string>(*t, "active_priority", "above_normal");
+            cfg.general.start_minimized    = GetOr<bool>(*t, "start_minimized", false);
+            cfg.general.restore_last_mode  = GetOr<bool>(*t, "restore_last_mode", true);
+            cfg.general.start_with_windows = GetOr<bool>(*t, "start_with_windows", false);
+            cfg.general.active_priority    = GetOr<std::string>(*t, "active_priority", "above_normal");
         }
         if (auto t = root["lens"].as_table()) {
             cfg.lens.width            = static_cast<int>(GetOr<int64_t>(*t, "width",  640));
@@ -433,9 +437,10 @@ bool SaveConfig(const fs::path& path, const Config& cfg) {
     root.insert("schema_version", static_cast<int64_t>(cfg.schema_version));
 
     toml::table g;
-    g.insert("start_minimized",   cfg.general.start_minimized);
-    g.insert("restore_last_mode", cfg.general.restore_last_mode);
-    g.insert("active_priority",   cfg.general.active_priority);
+    g.insert("start_minimized",    cfg.general.start_minimized);
+    g.insert("restore_last_mode",  cfg.general.restore_last_mode);
+    g.insert("start_with_windows", cfg.general.start_with_windows);
+    g.insert("active_priority",    cfg.general.active_priority);
     root.insert("general", std::move(g));
 
     toml::table l;

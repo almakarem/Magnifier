@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(Magnifier
-    VERSION 0.1.6
+    VERSION 0.1.7
     DESCRIPTION "Overlay magnifier for streamers (lens + full-screen, controller + hotkeys + CLI)"
     HOMEPAGE_URL "https://github.com/almakarem/Magnifier"
     LANGUAGES CXX
@@ -160,6 +160,8 @@ add_library(magnifier_core STATIC
     src/ui/TrayIcon.h
     src/ui/SettingsWindow.cpp
     src/ui/SettingsWindow.h
+    src/ui/ZoomHud.cpp
+    src/ui/ZoomHud.h
     src/util/Log.cpp
     src/util/Log.h
     src/util/Crash.cpp

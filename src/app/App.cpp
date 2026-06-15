@@ -39,6 +39,33 @@ constexpr int     kFallbackTickPeriodMs   = 8;
 // we don't burn CPU/GPU at 250 Hz when the user is just hovering a slider.
 constexpr int     kSettingsRenderPeriodMs = 16;
 
+// Register / unregister the per-user login entry under
+// HKCU\Software\Microsoft\Windows\CurrentVersion\Run. We store the current
+// executable path plus --start-minimized so an autostart launch is silent.
+// Per-user only — never requires admin, never touches HKLM.
+void SetAutostart(bool enable) {
+    HKEY hk = nullptr;
+    if (::RegOpenKeyExW(HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+            0, KEY_SET_VALUE, &hk) != ERROR_SUCCESS) {
+        return;
+    }
+    if (enable) {
+        wchar_t path[MAX_PATH] = {};
+        const DWORD n = ::GetModuleFileNameW(nullptr, path, MAX_PATH);
+        if (n > 0 && n < MAX_PATH) {
+            const std::wstring cmd =
+                L"\"" + std::wstring(path) + L"\" --start-minimized";
+            ::RegSetValueExW(hk, L"Magnifier", 0, REG_SZ,
+                reinterpret_cast<const BYTE*>(cmd.c_str()),
+                static_cast<DWORD>((cmd.size() + 1) * sizeof(wchar_t)));
+        }
+    } else {
+        ::RegDeleteValueW(hk, L"Magnifier");
+    }
+    ::RegCloseKey(hk);
+}
+
 } // namespace
 
 App::App() = default;
@@ -198,6 +225,9 @@ bool App::Initialise(HINSTANCE hinst, const AppOptions& opts) {
     last_tick_  = std::chrono::steady_clock::now();
     last_settings_render_ = last_tick_;
 
+    // ---- autostart (per-user login entry) ---------------------------------
+    SetAutostart(cfg_.general.start_with_windows);
+
     // ---- pid file ---------------------------------------------------------
     WritePidFile_();
 
@@ -237,6 +267,15 @@ bool App::Initialise(HINSTANCE hinst, const AppOptions& opts) {
             L"Settings:     " + settings + L"\r\n" +
             L"Right-click the tray icon for the full menu.";
         tray_.ShowBalloon(L"Magnifier is running", body);
+    }
+
+    // Unless the user asked to start minimised (via the --start-minimized CLI
+    // flag or general.start_minimized) — or supplied a startup command that
+    // already put us into a mode — surface the Settings window so a normal
+    // double-click launch is visibly "open" instead of sitting silently in
+    // the tray. Autostart launches pass --start-minimized and stay quiet.
+    if (!start_quiet && !opts.startup_command) {
+        ShowSettings();
     }
 
     spdlog::info("Magnifier ready.");
@@ -397,6 +436,20 @@ void App::OnTick_() {
     state_.Tick(dt);
     mag_.Tick();
 
+    const auto snap = state_.GetSnapshot();
+
+    // Zoom HUD: flash the "N.Nx" badge whenever the (eased) zoom is changing
+    // while a mode is active, then let it fade. Flashing every tick during the
+    // change keeps it at full opacity until the zoom settles; once it stops
+    // moving the hold timer expires and it fades out. Tiny epsilon ignores
+    // float noise so an idle lens doesn't keep the badge alive.
+    if (snap.mode != MagMode::Off &&
+        std::abs(snap.zoom - last_hud_zoom_) > 0.001f) {
+        zoom_hud_.Flash(snap.zoom);
+    }
+    last_hud_zoom_ = snap.zoom;
+    zoom_hud_.Tick(dt);
+
     // Pin the next tick to the panel's vblank. Without this, our timer
     // period (e.g. 4 ms on a 240 Hz panel) drifts against DWM's actual
     // composition cadence, so every few seconds we feed MagSetWindowSource
@@ -406,7 +459,7 @@ void App::OnTick_() {
     // and returns immediately if DWM is unavailable. Skipping it when no
     // magnification mode is active avoids the (small) wakeup cost while
     // the app is idle in the tray.
-    if (state_.GetSnapshot().mode != MagMode::Off) {
+    if (snap.mode != MagMode::Off) {
         ::DwmFlush();
     }
 
@@ -472,6 +525,8 @@ void App::SetMode(MagMode mode) {
                 ? ABOVE_NORMAL_PRIORITY_CLASS : NORMAL_PRIORITY_CLASS);
     } else {
         ::SetPriorityClass(::GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+        // No active mode -> tear the zoom badge down immediately.
+        zoom_hud_.Hide();
     }
 
     RefreshTrayTooltip_();
@@ -634,6 +689,17 @@ void App::ApplyConfig_(const Config& cfg) {
     if (controller_changed) SetControllerEnabled(cfg_.controller.enabled);
     controller_.SetConfig(cfg_.controller);
     router_->SetControllerConfig(cfg_.controller);
+
+    // Keep the login entry in sync with the toggle.
+    SetAutostart(cfg_.general.start_with_windows);
+    // Re-apply process priority live: if a mode is currently active, the new
+    // setting should take effect immediately rather than waiting for the next
+    // mode toggle.
+    if (state_.GetSnapshot().mode != MagMode::Off) {
+        ::SetPriorityClass(::GetCurrentProcess(),
+            cfg_.general.active_priority == "above_normal"
+                ? ABOVE_NORMAL_PRIORITY_CLASS : NORMAL_PRIORITY_CLASS);
+    }
 
     ApplyUpdateSettings_();
 

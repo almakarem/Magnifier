@@ -19,6 +19,9 @@ namespace magnifier {
 struct GeneralConfig {
     bool        start_minimized   = false;
     bool        restore_last_mode = true;
+    // Register a per-user HKCU\...\Run entry so Magnifier launches (minimised)
+    // at login. Applied on config save; never requires admin.
+    bool        start_with_windows = false;
     std::string active_priority   = "above_normal"; // "normal" | "above_normal"
 };
 
