@@ -1,4 +1,5 @@
 #include "input/InputRouter.h"
+#include <string>
 #include "app/App.h"
 #include "mag/StateModel.h"
 #include "util/Log.h"

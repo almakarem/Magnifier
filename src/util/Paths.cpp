@@ -1,4 +1,5 @@
 #include "util/Paths.h"
+#include <filesystem>
 
 #include <Windows.h>
 #include <ShlObj.h>

@@ -1,4 +1,7 @@
 #include "input/ControllerPoll.h"
+#include <mutex>
+#include <string_view>
+#include <thread>
 #include "util/Log.h"
 
 #include <Windows.h>

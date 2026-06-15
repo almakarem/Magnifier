@@ -1,4 +1,10 @@
 #include "app/App.h"
+#include <filesystem>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <string>
+#include <vector>
 #include "util/Log.h"
 #include "util/Paths.h"
 #include "util/StringConv.h"

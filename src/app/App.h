@@ -1,6 +1,8 @@
 #pragma once
 
 #include "config/ConfigStore.h"
+#include <optional>
+#include <string>
 #include "input/Actions.h"
 #include "input/ControllerPoll.h"
 #include "input/HotkeyManager.h"

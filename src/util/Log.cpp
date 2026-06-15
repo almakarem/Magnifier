@@ -1,4 +1,8 @@
 #include "util/Log.h"
+#include <chrono>
+#include <memory>
+#include <string_view>
+#include <vector>
 #include "util/Paths.h"
 #include "util/StringConv.h"
 

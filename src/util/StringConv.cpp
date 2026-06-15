@@ -1,4 +1,6 @@
 #include "util/StringConv.h"
+#include <string>
+#include <string_view>
 
 #include <Windows.h>
 

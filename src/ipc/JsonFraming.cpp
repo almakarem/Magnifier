@@ -1,4 +1,5 @@
 #include "ipc/JsonFraming.h"
+#include <string_view>
 #include "util/Log.h"
 
 namespace magnifier {

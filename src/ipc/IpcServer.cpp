@@ -1,4 +1,9 @@
 #include "ipc/IpcServer.h"
+#include <optional>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <vector>
 #include "ipc/JsonFraming.h"
 #include "util/Log.h"
 #include "util/StringConv.h"

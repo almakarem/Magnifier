@@ -1,4 +1,5 @@
 #include "input/WgiGamepad.h"
+#include <memory>
 #include "util/Log.h"
 
 // Raw WinRT ABI approach (no cppwinrt). The cppwinrt headers shipped in

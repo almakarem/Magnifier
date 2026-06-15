@@ -1,6 +1,7 @@
 #pragma once
 
 #include "input/Actions.h"
+#include <string>
 
 #include <Windows.h>
 #include <shellapi.h>

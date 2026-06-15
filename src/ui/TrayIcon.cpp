@@ -1,4 +1,5 @@
 #include "ui/TrayIcon.h"
+#include <string>
 #include "util/Log.h"
 #include "util/WinError.h"
 

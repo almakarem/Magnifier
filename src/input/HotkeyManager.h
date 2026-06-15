@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config/ConfigStore.h"
+#include <string>
 #include "input/Actions.h"
 
 #include <Windows.h>

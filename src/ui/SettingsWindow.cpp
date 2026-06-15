@@ -1,4 +1,7 @@
 #include "ui/SettingsWindow.h"
+#include <atomic>
+#include <memory>
+#include <string>
 #include "util/Log.h"
 #include "util/WinError.h"
 

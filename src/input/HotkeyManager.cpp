@@ -1,4 +1,6 @@
 #include "input/HotkeyManager.h"
+#include <map>
+#include <vector>
 #include "util/Log.h"
 #include "util/WinError.h"
 

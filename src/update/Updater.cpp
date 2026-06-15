@@ -1,4 +1,8 @@
 #include "update/Updater.h"
+#include <atomic>
+#include <memory>
+#include <string>
+#include <string_view>
 #include "util/Log.h"
 #include "util/StringConv.h"
 #include "util/WinError.h"

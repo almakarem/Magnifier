@@ -1,4 +1,5 @@
 #include "util/Crash.h"
+#include <string>
 #include "util/Paths.h"
 
 #include <Windows.h>

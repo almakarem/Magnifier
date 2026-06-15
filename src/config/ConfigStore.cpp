@@ -1,4 +1,9 @@
 #include "config/ConfigStore.h"
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
 #include "util/Log.h"
 #include "util/StringConv.h"
 

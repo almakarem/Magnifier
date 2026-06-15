@@ -1,4 +1,5 @@
 #include "mag/StateModel.h"
+#include <mutex>
 
 #include <algorithm>
 #include <cmath>
